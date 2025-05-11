@@ -3,10 +3,10 @@ import logging
 
 ROUTER_FILE_FIND_STRING = "$urlRouterProvider"
 
-def get_document_generation_prompt(source_language, files_to_process, additional_context):
+def get_document_generation_prompt(source_language, files_to_process, file_name,  file_content, additional_context):
     project_structure = ""
-    for _, (file_name, file_content) in files_to_process.items():
-        project_structure = project_structure + f"\n{file_name}"
+    for _, (file, _) in files_to_process.items():
+        project_structure = project_structure + f"\n{file}"
     
     document_generation_prompt = f"""
     You are an expert software documentation generator. 
@@ -61,10 +61,10 @@ def get_brd_generation_prompt(documentation_content):
     """
     return brd_generation_prompt
 
-def get_ang_to_react_code_conversion_prompt(files_to_process):
+def get_ang_to_react_code_conversion_prompt(files_to_process, file_name,  file_content, additional_context):
     project_structure = ""
-    for _, (file_name, file_content) in files_to_process.items():
-        project_structure = project_structure + f"\n{file_name}"
+    for _, (file, _) in files_to_process.items():
+        project_structure = project_structure + f"\n{file}"
     
     code_converion_prompt = f"""
     You are an expert in JavaScript frameworks, specializing in converting AngularJS applications to ReactJS. 
@@ -97,8 +97,8 @@ def get_ang_to_react_code_conversion_prompt(files_to_process):
         -> Provide the response in a structured format to facilitate direct integration into the ReactJS project.
         -> When converting serivces, create service Class with methods which can be consumed by React components.
     """
-    if "additional_context" in st.session_state:
-        code_converion_prompt = code_converion_prompt + f"\nAdditional Context: {st.session_state.additional_context}"
+
+    code_converion_prompt = code_converion_prompt + f"\nAdditional Context: {additional_context}"
 
     code_converion_prompt = f"""
     {code_converion_prompt}
@@ -107,13 +107,13 @@ def get_ang_to_react_code_conversion_prompt(files_to_process):
     {project_structure}
 
     ReactJS Project Folder Structure:
-    /react_project/src/components
-    /react_project/src/contexts
-    /react_project/src/services
-    /react_project/src/utils
-    /react_project/src/pages
-    /react_project/src/hooks
-    /react_project/src/assets
+    react_project/src/components
+    react_project/src/contexts
+    react_project/src/services
+    react_project/src/utils
+    react_project/src/pages
+    react_project/src/hooks
+    react_project/src/assets
     
     Current AngularJS File Name: {file_name}
     AngularJS Code to Convert:
@@ -121,18 +121,18 @@ def get_ang_to_react_code_conversion_prompt(files_to_process):
     """
     return code_converion_prompt
 
-
-def get_view_controller_conversion_prompt(source_path, view_file_name, controller_file_name, source_structure, target_path, target_structure, route_file):
-    view_content = read_file(view_file_name)
-    controller_content = read_file(controller_file_name)
-    router_content = read_file(route_file)
-
-    view_file_name = view_file_name.replace(source_path,'')
-    controller_file_name = controller_file_name.replace(source_path,'')
+# files_to_process, view_file_name, controller_file_name, SAMPLE_REACT_PROJECT_PATH, target_folder_structure, route_file, route_file_content
+def get_view_controller_conversion_prompt(files_to_process, target_folder_structure, view_file_name, controller_file_name, route_file_content, file_objects):
+    for item in file_objects:
+        file_name = item["file_name"]
+        if file_name == view_file_name: view_content = item["file_content"]
+        if file_name == controller_file_name: controller_content = item["file_content"]
+    
     source_project_structure = ""
-    for file in source_structure: source_project_structure = source_project_structure + f"\n{file.replace(source_path,'')}"
+    for _, (file_name, _) in files_to_process.items():
+        source_project_structure = source_project_structure + f"\n{file_name}"
     target_project_structure = ""
-    for file in target_structure: target_project_structure = target_project_structure + f"\n{file.replace(target_path,'')}"
+    for file in target_folder_structure: target_project_structure = target_project_structure + f"\n{file}"
 
     view_controller_conversion_prompt = f"""
     I have an AngularJS project that I am migrating to ReactJS. I will provide the following inputs:
@@ -165,19 +165,19 @@ def get_view_controller_conversion_prompt(source_path, view_file_name, controlle
     {controller_content}
 
     ReactJS Route Configuration File: 
-    {router_content}
+    {route_file_content}
 
     Source Folder Structure: 
     {source_project_structure}
 
     Target Folder Structure:
-    /react_project/src/components
-    /react_project/src/contexts
-    /react_project/src/services
-    /react_project/src/utils
-    /react_project/src/pages
-    /react_project/src/hooks
-    /react_project/src/assets
+    react_project/src/components
+    react_project/src/contexts
+    react_project/src/services
+    react_project/src/utils
+    react_project/src/pages
+    react_project/src/hooks
+    react_project/src/assets
 
     Expected Output:
     A fully functional ReactJS component file that correctly replaces the AngularJS implementation. Do not generate unnecessary commentary.
@@ -192,6 +192,8 @@ def get_view_controller_conversion_prompt(source_path, view_file_name, controlle
 def get_routing_information_prompt(files_to_process):
     found_route = False
     for user_request_details_id, (file_name, file_content) in files_to_process.items():
+        # print(file_name)
+        # if file_name.endswith("config.js"): print(file_content)
         if ROUTER_FILE_FIND_STRING in file_content:  
             found_route = True
             logging.info(f"Found route in file: {file_name}")
@@ -209,4 +211,4 @@ def get_routing_information_prompt(files_to_process):
     File_Content:
     {file_content}
     """
-    return user_request_details_id, file_name, routing_information_prompt
+    return user_request_details_id, file_name, file_content, routing_information_prompt
