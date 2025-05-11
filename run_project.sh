@@ -1,7 +1,7 @@
 #!/bin/bash
 export HF_HOME=/home/opc/hf_home
-export HUGGINGFACEHUB_API_TOKEN=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
-export JIRA_API_TOKEN=ATATT3xFfGF0aa8AHSZNm9AOkUipYel9tcRXFTBZlGZT624zjjCa-uBjEkX6P2z8C4mobQ83XMZlH98VVBY0IyqkH-skflVPr132jMxL5rFGhIWLTHY_Kf08OpZ21ikpUJ9g1sU8hYzob7Ois_2ApfpllleI9fx7co4OSZbl2L7vEPz3p5E0fCs=15ABCC9E
+export HUGGINGFACEHUB_API_TOKEN=
+export JIRA_API_TOKEN=
 export JIRA_INSTANCE_URL=https://kunalkamble85.atlassian.net
 export JIRA_USERNAME=kunalkamble85@gmail.com
 export JIRA_CLOUD=False
