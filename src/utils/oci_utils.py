@@ -1,4 +1,5 @@
 import oci
+import logging
 
 compartment_id = "ocid1.compartment.oc1..aaaaaaaacqxr3j2qbhntidg2s32gb67lv7ydpbfkvcazqvnjfsaxj3vdxr7a"
 CONFIG_PROFILE = "DEFAULT"
@@ -18,12 +19,12 @@ chat_detail = oci.generative_ai_inference.models.ChatDetails()
    
 
 def generate_oci_gen_ai_response(model, messages):
-    print(messages)
+    logging.debug(messages)
     if model.startswith("cohere.command"):
-        print(f"Sending request to model cohere Command model {model}")
+        logging.info(f"Sending request to model cohere Command model {model}")
         return handle_cohere_model_request(model, messages)
     else:
-        print(f"Sending request to model Meta Llama model {model}")
+        logging.info(f"Sending request to model Meta Llama model {model}")
         return handle_llama_model_request(model, messages)
 
 
@@ -61,7 +62,7 @@ def handle_llama_model_request(model, messages):
     chat_detail.compartment_id = compartment_id
     chat_response = generative_ai_inference_client.chat(chat_detail)
     response = chat_response.data.chat_response.choices[0].message.content[0].text
-    print(f"Got Response from {model}.")
+    logging.info(f"Got Response from {model}.")
     return response
 
 def handle_cohere_model_request(model, messages):
@@ -92,5 +93,5 @@ def handle_cohere_model_request(model, messages):
     chat_detail.compartment_id = compartment_id
     chat_response = generative_ai_inference_client.chat(chat_detail)
     response = chat_response.data.chat_response.chat_history[-1].message
-    print(f"Got Response from {model}.")
+    logging.info(f"Got Response from {model}.")
     return response
