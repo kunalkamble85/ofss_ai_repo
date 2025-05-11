@@ -1,7 +1,5 @@
 #!/bin/bash
 export HF_HOME=/home/opc/hf_home
-export HUGGINGFACEHUB_API_TOKEN=
-export JIRA_API_TOKEN=
 export JIRA_INSTANCE_URL=https://kunalkamble85.atlassian.net
 export JIRA_USERNAME=kunalkamble85@gmail.com
 export JIRA_CLOUD=False
