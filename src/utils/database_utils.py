@@ -232,3 +232,20 @@ def decode_blob_to_string(blob_data):
         logging.warning(f"Error decoding BLOB data: {str(e)}")
         logging.warning(traceback.format_exc())
         raise
+
+
+# num = 326
+# api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_DETAILS}/{num}"
+# logging.warning(f"Calling API: {api_endpoint}")
+# response = requests.get(api_endpoint)
+# if response.status_code == 200:
+#     data = response.json()
+#     docx_blob = data.get("documentation_file_content_docx")
+#     if docx_blob:
+#         # Decode base64 to bytes
+#         docx_bytes = base64.b64decode(docx_blob)
+#         # Write to a .docx file
+#         filename = f"output_{num}.docx"
+#         with open(filename, "wb") as f:
+#             f.write(docx_bytes)
+#         logging.warning(f"Wrote docx file: {filename}")

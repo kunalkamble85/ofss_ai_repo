@@ -38,18 +38,14 @@ def get_document_generation_prompt(source_language, files_to_process, file_name,
     """
     return document_generation_prompt
 
-def get_brd_generation_prompt(documentation_content):
+def get_brd_generation_prompt(documentation_content, component):
     brd_generation_prompt = f"""
     You are an expert business analyst with deep knowledge of software architecture, system design, and business requirements gathering. 
     Based on the provided documentation of multiple files from a software project, your task is to analyze and synthesize the key business requirements that emerge from the entire project.
     Carefully examine the content to identify:
-        1) Core Business Objectives: What problem is the project solving? What are the main business goals?
-        2) Key Features & Functionalities: Summarize the essential capabilities the system provides.
-        3) User Roles & Interactions: Identify the main users and how they interact with the system.
-        4) Data Flow & Processing: Describe how data moves through the system and any critical transformations.
-        5) Integration Points: Highlight dependencies on other systems or APIs.
-        6) Regulatory or Compliance Requirements (if applicable).
-    Use concise, structured language to generate a well-organized Business Requirement Document (BRD). 
+    {component}
+
+    Use detailed, structured language to generate a well-organized Business Requirement Document (BRD). 
     The output should be formatted with proper sections, bullet points, and headings to ensure clarity.
     
     Only provide documentation on given file contents and do not generate any content outside of this information provided, this is super important while generating your response.
@@ -60,6 +56,21 @@ def get_brd_generation_prompt(documentation_content):
     Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
     """
     return brd_generation_prompt
+
+
+def get_user_stories_generation_prompt(documentation_content):
+    template = f"""
+        You are an certified product owner of Agile Scrum methodology and you know how to write perfect User Story for Agile Scrum process. 
+        I would be providing you the Buiness Use Case. Understand the context of use case and generate User Stories.
+        Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
+        Do not generate unnecessary commentary in your answer.
+        Only generate functional User Stories nothing else.
+        Buiness Use Case:
+        {documentation_content}
+    """
+    return template
+
+
 
 def get_ang_to_react_code_conversion_prompt(files_to_process, file_name,  file_content, additional_context):
     project_structure = ""

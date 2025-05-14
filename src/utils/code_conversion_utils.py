@@ -9,6 +9,12 @@ import shutil
 import database_utils
 import logging
 import prompts
+from io import BytesIO
+from docx import Document
+from markdown import markdown
+from bs4 import BeautifulSoup
+import base64
+
 
 conversion_folder = "code_conversion_files"
 react_project_zip_file = f"{conversion_folder}/target_react_structure/react_project.zip"
@@ -292,6 +298,92 @@ def generate_analysis_report(user_request_id, test_mode):
         logging.warning(f"END: generate_analysis_report with user_request_id={user_request_id}")
 
 
+def generate_brd_report(llm_model, documentation_content):
+    """
+    Generates a Business Requirement Document (BRD) based on the provided documentation content.
+    """
+    logging.warning(f"Generating BRD content for the documentation.")
+    
+    # brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?",
+    #     "Key Features & Functionalities: Summarize the essential capabilities the system provides."
+    #     "User Roles & Interactions: Identify the main users and how they interact with the system."
+    #     "Data Flow & Processing: Describe how data moves through the system and any critical transformations."
+    #     "Integration Points: Highlight dependencies on other systems or APIs."
+    #     "Regulatory or Compliance Requirements: Any legal or compliance standards the system must adhere to if applicable.",
+    #     "List of User Strories: Provide a list of all the user stories or use cases that the system must support."]
+    brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?"]
+    brds = []
+    for component in brd_components:
+        logging.warning(f"Generating BRD content for {component}.")
+        brd_generation_prompt = prompts.get_brd_generation_prompt("\n".join(documentation_content), component)
+        response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": brd_generation_prompt}])
+        brds.append(response)
+    
+    logging.warning(f"Generating User Stories content.")
+    us_generation_prompt = prompts.get_user_stories_generation_prompt("\n".join(documentation_content))
+    us_response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": us_generation_prompt}])
+    return "\n\n".join(brds), us_response
+
+
+
+def md_to_docx_content(md_content):
+    """
+    Converts a markdown string to a docx Document object and returns the binary content.
+
+    Args:
+        md_content (str): Markdown formatted string.
+
+    Returns:
+        bytes: Binary content of the generated docx file.
+    """
+    # Convert markdown to HTML
+    html = markdown(md_content, extensions=['fenced_code', 'tables'])
+    soup = BeautifulSoup(html, "html.parser")
+
+    doc = Document()
+
+    for element in soup.children:
+        if element.name == 'h1':
+            doc.add_heading(element.get_text(), level=1)
+        elif element.name == 'h2':
+            doc.add_heading(element.get_text(), level=2)
+        elif element.name == 'h3':
+            doc.add_heading(element.get_text(), level=3)
+        elif element.name == 'ul':
+            for li in element.find_all('li'):
+                doc.add_paragraph(li.get_text(), style='List Bullet')
+        elif element.name == 'ol':
+            for li in element.find_all('li'):
+                doc.add_paragraph(li.get_text(), style='List Number')
+        elif element.name == 'pre':
+            code = element.get_text()
+            doc.add_paragraph(code, style='Intense Quote')
+        elif element.name == 'p':
+            doc.add_paragraph(element.get_text())
+        elif element.name == 'table':
+            rows = element.find_all('tr')
+            if rows:
+                cols = rows[0].find_all(['td', 'th'])
+                table = doc.add_table(rows=len(rows), cols=len(cols))
+                for i, row in enumerate(rows):
+                    cells = row.find_all(['td', 'th'])
+                    for j, cell in enumerate(cells):
+                        table.cell(i, j).text = cell.get_text()
+
+    # Save to BytesIO and return bytes
+    output = BytesIO()
+    doc.save(output)
+    return base64.b64encode(output.getvalue()).decode("utf-8")
+    # with open("output.docx", "wb") as f:
+    #     f.write(output.getvalue())
+    # return output.getvalue()
+
+def generate_docx_from_md(df):
+    df['documentation_file_name_docx'] = df['documentation_file_name'].apply(lambda x: x.replace('.md', '.docx') if x.endswith('.md') else x + '.docx')
+    df['documentation_file_content_docx'] = df['documentation_file_content'].apply(md_to_docx_content)
+    return df
+
+
 def generate_documentation_report(llm_model, user_request_id, test_mode, additional_context):
     """
     Generates a documentation report for the files associated with a given user request ID.
@@ -324,7 +416,7 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
         errors = []
         df = pd.DataFrame(columns=['user_request_details_id', 'user_request_id', 'documentation_file_name', 'documentation_file_content', 'success_flag', 'error_details', 'updated_by'])
         data_counter = 0
-        documentation_content = ""
+        documentation_content = []
 
         for user_request_details_id, (file_name, file_content) in files_to_process.items():
             try:
@@ -340,7 +432,7 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
                     target_file = target_file + "_documentation.md"
 
                 logging.warning(f"Generated documentation for file: {file_name}, Target file: {target_file}")
-                documentation_content += f"\nFile:{target_file}\nContent of file:\n{response}"
+                documentation_content.append(f"File:{target_file}\nContent of file:\n{response}")
                 df.loc[data_counter] = [user_request_details_id, user_request_id, target_file, response, "Y", None, updated_by]
                 data_counter += 1
 
@@ -352,13 +444,13 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
                 logging.warning(traceback.format_exc())
                 errors.append(file_name)
 
-        logging.warning(f"Generating BRD content")
-        brd_generation_prompt = prompts.get_brd_generation_prompt(documentation_content)
-        response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": brd_generation_prompt}])
-        df.loc[data_counter] = [None, user_request_id, "documentation/BusinessRequirementDocument.md", response, "Y", None, updated_by]
-
+        brd, us_response= generate_brd_report(llm_model, documentation_content)
+        df.loc[data_counter] = [None, user_request_id, "documentation/BusinessRequirementDocument.md", brd, "Y", None, updated_by]
+        data_counter += 1
+        df.loc[data_counter] = [None, user_request_id, "documentation/UserStories.md", us_response, "Y", None, updated_by]
         logging.warning(f"Errors encountered: {errors}")
         logging.warning(f"Completed generating documentation report for package_name: {package_name}")
+        df = generate_docx_from_md(df)
         database_utils.update_documentation_report(df)
     except Exception as e:
         logging.warning(f"Error in generate_documentation_report: {str(e)}")
@@ -484,3 +576,4 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
         raise
     finally:
         logging.warning(f"END: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}")
+
