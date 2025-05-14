@@ -304,14 +304,14 @@ def generate_brd_report(llm_model, documentation_content):
     """
     logging.warning(f"Generating BRD content for the documentation.")
     
-    # brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?",
-    #     "Key Features & Functionalities: Summarize the essential capabilities the system provides."
-    #     "User Roles & Interactions: Identify the main users and how they interact with the system."
-    #     "Data Flow & Processing: Describe how data moves through the system and any critical transformations."
-    #     "Integration Points: Highlight dependencies on other systems or APIs."
-    #     "Regulatory or Compliance Requirements: Any legal or compliance standards the system must adhere to if applicable.",
-    #     "List of User Strories: Provide a list of all the user stories or use cases that the system must support."]
-    brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?"]
+    brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?",
+        "Key Features & Functionalities: Summarize the essential capabilities the system provides."
+        "User Roles & Interactions: Identify the main users and how they interact with the system."
+        "Data Flow & Processing: Describe how data moves through the system and any critical transformations."
+        "Integration Points: Highlight dependencies on other systems or APIs."
+        "Regulatory or Compliance Requirements: Any legal or compliance standards the system must adhere to if applicable.",
+        "List of User Strories: Provide a list of all the user stories or use cases that the system must support."]
+    # brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?"]
     brds = []
     for component in brd_components:
         logging.warning(f"Generating BRD content for {component}.")
