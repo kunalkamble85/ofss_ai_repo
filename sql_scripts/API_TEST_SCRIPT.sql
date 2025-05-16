@@ -1,19 +1,31 @@
 DECLARE
-  l_clob    CLOB;
-  l_buffer  VARCHAR2(32767);
-  l_amount  NUMBER := 32000;
-  l_offset  NUMBER := 1;
-  l_json    VARCHAR2(32767);
-  l_status  VARCHAR2(100); -- example parameter from JSON
+  l_clob clob;
+  l_buffer         varchar2(32767);
+  l_amount         number;
+  l_offset         number;
 BEGIN
-  -- Parse JSON using APEX_JSON
---   l_json := '{"message": "Welcome"}'; -- OUTPUT FROM REST
-  l_json := '{"file_name":"test_name","number_of_lines":"5", "number_of_lines_no_doc":"3", "tokens":"100", "tokens_no_doc":"80"}'; -- OUTPUT FROM REST
-  APEX_JSON.parse(l_json);
 
-  -- Extract JSON value (example: $.status or $.data.id, etc.)
-  l_status := APEX_JSON.get_varchar2(p_path => 'number_of_lines'); -- adjust the path based on actual JSON structure
+  l_clob := apex_web_service.make_rest_request(
+              p_url => 'https://ehagexkm6mf2ngjogvtvksf2sm.apigateway.us-ashburn-1.oci.customer-oci.com/finergy-ai/',
+              p_http_method => 'GET');
 
-  -- Print the value
-  htp.p('Message from JSON: ' || l_status);
+    l_amount := 32000;
+    l_offset := 1;
+    BEGIN
+        LOOP
+            dbms_lob.read( l_clob, l_amount, l_offset, l_buffer );
+            htp.p(l_buffer);
+            l_offset := l_offset + l_amount;
+            l_amount := 32000;
+        END LOOP;
+    EXCEPTION
+        WHEN no_data_found THEN
+            NULL;
+    END;
 END;
+
+
+select apex_web_service.make_rest_request(
+    p_url         => 'https://ehagexkm6mf2ngjogvtvksf2sm.apigateway.us-ashburn-1.oci.customer-oci.com/finergy-ai/',
+    p_http_method => 'GET'
+) from dual;

@@ -5,7 +5,6 @@ import tiktoken
 from oci_utils import generate_oci_gen_ai_response
 import re
 import json
-import shutil
 import database_utils
 import logging
 import prompts
@@ -14,6 +13,7 @@ from docx import Document
 from markdown import markdown
 from bs4 import BeautifulSoup
 import base64
+import time
 
 
 conversion_folder = "code_conversion_files"
@@ -245,7 +245,9 @@ def generate_analysis_report(user_request_id, test_mode):
         Exception: If there is an error during the analysis process.
     """
     logging.warning(f"START: generate_analysis_report with user_request_id={user_request_id}")
+    start_time = time.time()
     try:
+        database_utils.update_user_request_status(user_request_id, {"analysis_request_status":"In-Progress","error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
@@ -286,43 +288,49 @@ def generate_analysis_report(user_request_id, test_mode):
                 logging.warning(f"Error processing file {file_name}: {str(e)}")
                 logging.warning(traceback.format_exc())
                 errors.append(file_name)
-        
+        database_utils.update_user_request_status(user_request_id, {"analysis_request_status":"Done","error_message":None})
         logging.warning(f"Errors encountered: {errors}")
         logging.warning(f"Completed generating analysis report for package_name: {package_name}")
         database_utils.update_analysis_report(df)
     except Exception as e:
         logging.warning(f"Error in generate_analysis_report: {str(e)}")
         logging.warning(traceback.format_exc())
+        database_utils.update_user_request_status(user_request_id, {"analysis_request_status":"Done", "error_message":str(e)})
         raise
     finally:
-        logging.warning(f"END: generate_analysis_report with user_request_id={user_request_id}")
+        end_time = time.time()
+        total_time = end_time - start_time
+        logging.warning(f"END: generate_analysis_report with user_request_id={user_request_id}. Total time taken: {total_time:.2f} seconds")
 
 
-def generate_brd_report(llm_model, documentation_content):
+def generate_brd_report(llm_model, documentation_content, user_documentation_components):
+    db_documentation_components_details = database_utils.db_get_documentation_components()
     """
     Generates a Business Requirement Document (BRD) based on the provided documentation content.
     """
     logging.warning(f"Generating BRD content for the documentation.")
+
+    documentation_components = []
+    if len(user_documentation_components) == 0:
+        for db_documentation_components_detail in db_documentation_components_details:
+            documentation_components.append((db_documentation_components_detail["target_file_name"], 
+                                        db_documentation_components_detail["documentation_component"]))
+    else:
+        for user_documentation_component_id in user_documentation_components:
+            for db_documentation_components_detail in db_documentation_components_details:
+                if user_documentation_component_id == db_documentation_components_detail["documentation_components_id"]:
+                    documentation_components.append((db_documentation_components_detail["target_file_name"], 
+                                        db_documentation_components_detail["documentation_component"]))
+                    break
     
-    brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?",
-        "Key Features & Functionalities: Summarize the essential capabilities the system provides."
-        "User Roles & Interactions: Identify the main users and how they interact with the system."
-        "Data Flow & Processing: Describe how data moves through the system and any critical transformations."
-        "Integration Points: Highlight dependencies on other systems or APIs."
-        "Regulatory or Compliance Requirements: Any legal or compliance standards the system must adhere to if applicable.",
-        "List of User Strories: Provide a list of all the user stories or use cases that the system must support."]
-    # brd_components = ["Core Business Objectives: What problem is the project solving? What are the main business goals?"]
     brds = []
-    for component in brd_components:
+    for component_doc_name, component in documentation_components:
         logging.warning(f"Generating BRD content for {component}.")
         brd_generation_prompt = prompts.get_brd_generation_prompt("\n".join(documentation_content), component)
-        response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": brd_generation_prompt}])
-        brds.append(response)
+        component_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": brd_generation_prompt}])
+        brds.append((component_doc_name, component_content))
     
-    logging.warning(f"Generating User Stories content.")
-    us_generation_prompt = prompts.get_user_stories_generation_prompt("\n".join(documentation_content))
-    us_response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": us_generation_prompt}])
-    return "\n\n".join(brds), us_response
+    return brds
 
 
 
@@ -384,7 +392,7 @@ def generate_docx_from_md(df):
     return df
 
 
-def generate_documentation_report(llm_model, user_request_id, test_mode, additional_context):
+def generate_documentation_report(llm_model, user_request_id, test_mode, additional_context, documentation_components):
     """
     Generates a documentation report for the files associated with a given user request ID.
 
@@ -398,7 +406,9 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
         Exception: If there is an error during the documentation generation process.
     """
     logging.warning(f"START: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}")
+    start_time = time.time()
     try:
+        database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"In-Progress", "error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
@@ -444,20 +454,24 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
                 logging.warning(traceback.format_exc())
                 errors.append(file_name)
 
-        brd, us_response= generate_brd_report(llm_model, documentation_content)
-        df.loc[data_counter] = [None, user_request_id, "documentation/BusinessRequirementDocument.md", brd, "Y", None, updated_by]
-        data_counter += 1
-        df.loc[data_counter] = [None, user_request_id, "documentation/UserStories.md", us_response, "Y", None, updated_by]
+        brd_reponse = generate_brd_report(llm_model, documentation_content, documentation_components)
+        for (component_doc_name, component_content) in brd_reponse:
+            df.loc[data_counter] = [None, user_request_id, component_doc_name, component_content, "Y", None, updated_by]
+            data_counter += 1
         logging.warning(f"Errors encountered: {errors}")
         logging.warning(f"Completed generating documentation report for package_name: {package_name}")
         df = generate_docx_from_md(df)
         database_utils.update_documentation_report(df)
+        database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"Done","error_message":None})
     except Exception as e:
         logging.warning(f"Error in generate_documentation_report: {str(e)}")
         logging.warning(traceback.format_exc())
+        database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"Done", "error_message":str(e)})
         raise
     finally:
-        logging.warning(f"END: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}")
+        end_time = time.time()
+        total_time = end_time - start_time
+        logging.warning(f"END: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}. Total time taken: {total_time:.2f} seconds")
 
 
 def generate_conversion_report(llm_model, user_request_id, test_mode, additional_context):
@@ -474,7 +488,9 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
         Exception: If there is an error during the conversion process.
     """
     logging.warning(f"START: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}")
+    start_time = time.time()
     try:
+        database_utils.update_user_request_status(user_request_id, {"conversion_request_status":"In-Progress","error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
@@ -570,10 +586,14 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
         logging.warning(f"Errors encountered: {errors}")
         logging.warning(f"Completed converting code from: {source_language} to {target_language} for package_name: {package_name}")
         database_utils.update_conversion_report(df)
+        database_utils.update_user_request_status(user_request_id, {"conversion_request_status":"Done","error_message":None})
     except Exception as e:
         logging.warning(f"Error in generate_conversion_report: {str(e)}")
         logging.warning(traceback.format_exc())
+        database_utils.update_user_request_status(user_request_id, {"conversion_request_status":"Done", "error_message":str(e)})
         raise
     finally:
-        logging.warning(f"END: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}")
+        end_time = time.time()
+        total_time = end_time - start_time
+        logging.warning(f"END: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}. Total time taken: {total_time:.2f} seconds")
 

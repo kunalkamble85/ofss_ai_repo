@@ -12,6 +12,7 @@ USER_REQUEST_DETAILS = "userrequestdetails"
 ANALYSIS_DETAILS = "analysisdetails"
 DOCUMENTATION_DETAILS = "documentationdetails"
 CONVERSION_DETAILS = "conversiondetails"
+DOCUMENTATION_COMPONENTS = "documentationcomponents"
 
 
 def get_language_details(code_language_id):
@@ -112,7 +113,27 @@ def db_get_user_request_details(user_request_id):
     finally:
         logging.warning(f"END: db_get_user_request_details with user_request_id={user_request_id}")
 
-def update_database_by_dict(api_endpoint, prop_dict):
+def db_get_documentation_components():
+    logging.warning(f"START: db_get_documentation_components.")
+    try:
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_COMPONENTS}/"
+        logging.warning(f"Calling API: {api_endpoint}")
+        response = requests.get(api_endpoint)
+        if response.status_code == 200:
+            data = response.json()
+            # If there are any BLOB fields, decode as needed here
+            return data["items"]
+        else:
+            response.raise_for_status()
+    except Exception as e:
+        logging.warning(f"Error in db_get_documentation_components: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning(f"END: db_get_documentation_components.")
+
+
+def update_database_by_dict(api_endpoint, prop_dict, method = "POST"):
     """
     Updates the database by sending a dict object to the specified API endpoint.
 
@@ -125,9 +146,13 @@ def update_database_by_dict(api_endpoint, prop_dict):
     """
     json_string = json.dumps(prop_dict)
     logging.warning(f"json_string: {json_string}")
-    response = requests.post(api_endpoint, data=json_string, headers={"Content-Type": "application/json"})
-    if response.status_code == 201:
-        logging.warning(f"Inserted Successfully.")
+    if method == "POST":
+        response = requests.post(api_endpoint, data=json_string, headers={"Content-Type": "application/json"})
+    else:
+        response = requests.put(api_endpoint, data=json_string, headers={"Content-Type": "application/json"})
+    # print(vars(response))
+    if response.status_code in (200, 201):
+        logging.warning(f"Inserted/Updated Successfully.")
     else:
         logging.warning(f"Error for record.")
         response.raise_for_status()
@@ -149,6 +174,36 @@ def update_database(api_endpoint, df):
         row_dict['updated_datetime'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')        
         logging.warning(f"Row {index}: {row_dict}")
         update_database_by_dict(api_endpoint, row_dict)
+
+def update_user_request_status(user_request_id, action_status_dict):
+    """
+    Updates the user request in the database.
+
+    Args:
+        df (DataFrame): The DataFrame containing the user request data.
+
+    Raises:
+        Exception: If there is an error during the update process.
+    """
+    logging.warning("START: update_user_request")
+    try:
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{USER_REQUEST}/{user_request_id}"
+        logging.warning(f"Calling API: {api_endpoint}")
+        response = requests.get(api_endpoint)
+        if response.status_code == 200:
+            response_dict = response.json()
+            response_dict.update(action_status_dict)
+            
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{USER_REQUEST}/{user_request_id}"
+        update_database_by_dict(api_endpoint, response_dict, "PUT")
+    except Exception as e:
+        # print(traceback.format_exc())
+        logging.warning(f"Error in update_user_request: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning("END: update_user_request")
+
 
 def update_analysis_report(df):
     """
@@ -232,20 +287,3 @@ def decode_blob_to_string(blob_data):
         logging.warning(f"Error decoding BLOB data: {str(e)}")
         logging.warning(traceback.format_exc())
         raise
-
-
-# num = 326
-# api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_DETAILS}/{num}"
-# logging.warning(f"Calling API: {api_endpoint}")
-# response = requests.get(api_endpoint)
-# if response.status_code == 200:
-#     data = response.json()
-#     docx_blob = data.get("documentation_file_content_docx")
-#     if docx_blob:
-#         # Decode base64 to bytes
-#         docx_bytes = base64.b64decode(docx_blob)
-#         # Write to a .docx file
-#         filename = f"output_{num}.docx"
-#         with open(filename, "wb") as f:
-#             f.write(docx_bytes)
-#         logging.warning(f"Wrote docx file: {filename}")

@@ -4,6 +4,8 @@ from logging.handlers import TimedRotatingFileHandler
 from fastapi import FastAPI
 import code_conversion_utils
 from pydantic import BaseModel
+import threading
+import time
 
 # Configure logging with a rolling appender for daily logs
 log_dir = "./logs"
@@ -18,6 +20,17 @@ logging.basicConfig(level=logging.WARNING, handlers=[handler])
 
 os.environ["TIKTOKEN_CACHE_DIR"] = "./cache"
 app = FastAPI()
+
+class UserRequest(BaseModel):
+    """
+    Represents the structure of a user request for the API endpoints.
+    """
+    user_request_id: int
+    llm_model: str = "meta.llama3.3-70b"
+    test_mode: bool = False
+    additional_context: str = None
+    documentation_components: str = []
+
 
 @app.get("/")
 async def root(test_mode: bool = False):
@@ -35,14 +48,6 @@ async def root(test_mode: bool = False):
     logging.warning(f"END: root method with response={response}")
     return response
 
-class UserRequest(BaseModel):
-    """
-    Represents the structure of a user request for the API endpoints.
-    """
-    user_request_id: int
-    llm_model: str = "meta.llama3.3-70b"
-    test_mode: bool = False
-    additional_context: str = None
 
 @app.post("/generate_analysis/")
 async def generate_analysis(user_request: UserRequest):
@@ -59,9 +64,13 @@ async def generate_analysis(user_request: UserRequest):
     test_mode = user_request.test_mode
     logging.warning(f"START: generate_analysis method with user_request_id={user_request_id}, test_mode={test_mode}")
     try:
-        logging.warning(f"Calling code_conversion_utils.generate_analysis_report with user_request_id={user_request_id}, test_mode={test_mode}")
-        code_conversion_utils.generate_analysis_report(user_request_id, test_mode)
-        logging.warning(f"Completed code_conversion_utils.generate_analysis_report for user_request_id={user_request_id}")
+        def run_report():
+            code_conversion_utils.generate_analysis_report(user_request_id, test_mode)
+
+        thread = threading.Thread(target=run_report)
+        logging.warning(f"Calling code_conversion_utils.generate_analysis_report with user_request_id={user_request_id}, test_mode={test_mode} in a separate thread")
+        thread.start()
+        # Do not join the thread; respond immediately
         response = {
             "user_request_id": user_request_id,
             "success": True,
@@ -94,12 +103,17 @@ async def generate_documentation(user_request: UserRequest):
     test_mode = user_request.test_mode
     additional_context = user_request.additional_context
     llm_model = user_request.llm_model
+    documentation_components = user_request.documentation_components
 
     logging.warning(f"START: generate_documentation method with user_request_id={user_request_id}, test_mode={test_mode}")
     try:
-        logging.warning(f"Calling code_conversion_utils.generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}")
-        code_conversion_utils.generate_documentation_report(llm_model, user_request_id, test_mode, additional_context)
-        logging.warning(f"Completed code_conversion_utils.generate_documentation_report for user_request_id={user_request_id}")        
+        def run_report():
+            code_conversion_utils.generate_documentation_report(llm_model, user_request_id, test_mode, additional_context, documentation_components)
+
+        thread = threading.Thread(target=run_report)
+        logging.warning(f"Calling code_conversion_utils.generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode} in a separate thread")
+        thread.start()
+        # Do not join the thread; respond immediately
         response = {
             "user_request_id": user_request_id,
             "success": True,
@@ -134,10 +148,13 @@ async def generate_conversion(user_request: UserRequest):
     llm_model = user_request.llm_model
     logging.warning(f"START: generate_conversion method with user_request_id={user_request_id}, test_mode={test_mode}")
     try:
-        logging.warning(f"Calling code_conversion_utils.generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}")
-        code_conversion_utils.generate_conversion_report(llm_model, user_request_id, test_mode, additional_context)
-        logging.warning(f"Completed code_conversion_utils.generate_conversion_report for user_request_id={user_request_id}")
-        
+        def run_report():
+            code_conversion_utils.generate_conversion_report(llm_model, user_request_id, test_mode, additional_context)
+
+        thread = threading.Thread(target=run_report)
+        logging.warning(f"Calling code_conversion_utils.generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode} in a separate thread")
+        thread.start()
+        # Do not join the thread; respond immediately
         response = {
             "user_request_id": user_request_id,
             "success": True,

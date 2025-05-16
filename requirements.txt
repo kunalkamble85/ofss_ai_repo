@@ -4,3 +4,6 @@ oracledb
 tiktoken
 oci
 pandas
+Markdown2docx
+markdown
+fastapi["standard"]

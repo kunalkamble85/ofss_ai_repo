@@ -40,20 +40,21 @@ def get_document_generation_prompt(source_language, files_to_process, file_name,
 
 def get_brd_generation_prompt(documentation_content, component):
     brd_generation_prompt = f"""
-    You are an expert business analyst with deep knowledge of software architecture, system design, and business requirements gathering. 
-    Based on the provided documentation of multiple files from a software project, your task is to analyze and synthesize the key business requirements that emerge from the entire project.
-    Carefully examine the content to identify:
-    {component}
+    You are a technical documentation expert. You are given:
+    1. Concatenated documentation generated from code files related to a single software component.
+    2. A specific user request asking for certain details about that component.
 
-    Use detailed, structured language to generate a well-organized Business Requirement Document (BRD). 
-    The output should be formatted with proper sections, bullet points, and headings to ensure clarity.
+    Your task is to extract or synthesize detailed documentation that directly addresses the user's request using the provided documentation.
     
-    Only provide documentation on given file contents and do not generate any content outside of this information provided, this is super important while generating your response.
-
-    Here is the documentation for all files in the project:
+    Here is the concatenated documentation:
     {documentation_content}
 
-    Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
+    A specific user request to extract:
+    {component}
+
+    - Organize the output clearly and concisely, using bullet points, headings, or code snippets as appropriate.
+    - Only provide documentation on given file contents and do not generate any content outside of this information provided, this is super important while generating your response.
+    - Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
     """
     return brd_generation_prompt
 
