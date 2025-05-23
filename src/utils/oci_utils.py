@@ -11,7 +11,8 @@ model_endpoint_map = {"meta.llama3.1-70b":"ocid1.generativeaimodel.oc1.uk-london
                       "meta.llama3.3-70b":"ocid1.generativeaimodel.oc1.uk-london-1.amaaaaaask7dceyach2dyu6g5w5ocnvbkto2g76wxitj3rpddplsqoxqh2lq",
                       "meta.llama3.1-405b": "ocid1.generativeaiendpoint.oc1.uk-london-1.amaaaaaah7afz4ia4s7lwl5qt7bmupjqknwyvwbfpi7id3onks5rdaga2v5a",
                       "cohere.command-r-plus":"ocid1.generativeaimodel.oc1.uk-london-1.amaaaaaask7dceya5umoptfnq5yg7w2l5lte3fjpism64ismzmyehfcdh5cq",
-                      "cohere.command-r":"ocid1.generativeaimodel.oc1.uk-london-1.amaaaaaask7dceyahpidcahiiyhcdmnvicfxo7suq3pxcimkyik75mbxziqq"}
+                      "cohere.command-r":"ocid1.generativeaimodel.oc1.uk-london-1.amaaaaaask7dceyahpidcahiiyhcdmnvicfxo7suq3pxcimkyik75mbxziqq",
+                      "cohere.embed-english":""}
 
 
 generative_ai_inference_client = oci.generative_ai_inference.GenerativeAiInferenceClient(config=config, service_endpoint=endpoint, retry_strategy=oci.retry.NoneRetryStrategy(), timeout=(10,240))
@@ -95,3 +96,43 @@ def handle_cohere_model_request(model, messages):
     response = chat_response.data.chat_response.chat_history[-1].message
     logging.info(f"Got Response from {model}.")
     return response
+
+
+def generate_embeddings(inputs):
+    """
+    Generates embeddings for a list of input texts using OCI Generative AI Inference.
+    Handles a maximum of 96 inputs at a time.
+
+    Args:
+        inputs (list): List of input strings to generate embeddings for.
+
+    Returns:
+        dict: Dictionary mapping input text to its embedding.
+    """
+    logging.warning("START: generate_embeddings")
+    logging.info(f"Input Length for embedding: {len(inputs)}")
+    max_batch_size = 96
+    embeddings_dict = {}
+
+    # Process inputs in batches of max_batch_size
+    for i in range(0, len(inputs), max_batch_size):
+        batch = inputs[i:i+max_batch_size]
+        embed_text_detail = oci.generative_ai_inference.models.EmbedTextDetails()
+        embed_text_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id="cohere.embed-english-v3.0")
+        embed_text_detail.inputs = batch
+        embed_text_detail.truncate = "NONE"
+        embed_text_detail.compartment_id = compartment_id
+        embed_text_response = generative_ai_inference_client.embed_text(embed_text_detail)
+        logging.info("Received embedding response from OCI Generative AI Inference.")
+        logging.info(f"Number of embeddings generated in batch: {len(embed_text_response.data.embeddings)}")
+        if embed_text_response.data.embeddings:
+            logging.info(f"First embedding in batch: {embed_text_response.data.embeddings[0]}")
+        # Map each input text to its embedding
+        for text, embedding in zip(batch, embed_text_response.data.embeddings):
+            embeddings_dict[text] = embedding
+
+    logging.warning("END: generate_embeddings")
+    return embeddings_dict
+
+# inputs = ["Hello, How Are you?", "I am Kunal"]
+# print(generate_embeddings(inputs))

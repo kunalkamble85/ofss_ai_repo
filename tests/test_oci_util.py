@@ -27,5 +27,20 @@ class TestOciUtil(unittest.TestCase):
         print(response)
         self.assertEqual(False, response == "")
 
+    def test_generate_embeddings(self):
+        # Test with list of texts
+        inputs = [
+            "Hello, how are you?",
+            "This is a test sentence.",
+            "OCI Generative AI embedding test."
+        ]
+        result = oci_util.generate_embeddings(inputs)
+        print(result)
+        self.assertTrue(isinstance(result, dict))
+        self.assertEqual(len(result), len(inputs))
+        for text, embedding in result.items():
+            self.assertTrue(isinstance(text, str))
+            self.assertTrue(isinstance(embedding, list))
+
 if __name__ == '__main__':
     unittest.main()
