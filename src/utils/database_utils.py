@@ -133,6 +133,53 @@ def db_get_documentation_components():
         logging.warning(f"END: db_get_documentation_components.")
 
 
+def db_get_documentation_details(user_request_id):
+    logging.warning(f"START: db_get_documentation_details.")
+    try:
+        query_param = '?q={"user_request_id":{"$eq":"'+str(user_request_id)+'"}}&limit=500'
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_DETAILS}/{query_param}"
+        logging.warning(f"Calling API: {api_endpoint}")
+        response = requests.get(api_endpoint)
+        if response.status_code == 200:
+            data = response.json()            
+            return data["items"]
+        else:
+            response.raise_for_status()
+    except Exception as e:
+        logging.warning(f"Error in db_get_documentation_details: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning(f"END: db_get_documentation_details.")
+    return None
+
+
+def db_get_documentation_and_file_details(user_request_id):
+    logging.warning(f"START: db_get_documentation_and_file_details.")
+    code_documentation_details = []
+    try:        
+        documentation_details_list = db_get_documentation_details(user_request_id)
+        for documentation_details in documentation_details_list:
+            user_request_details_id = documentation_details["user_request_details_id"]
+            if user_request_details_id is not None:
+                api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{USER_REQUEST_DETAILS}/{user_request_details_id}"
+                response = requests.get(api_endpoint)
+                user_request_detail = response.json()
+                if user_request_detail["file_type"] == "Text":
+                    file_name = user_request_detail["file_name"]
+                    file_code_content = decode_blob_to_string(user_request_detail["file_content"])
+                    code_documentation_details.append((file_name, file_code_content, documentation_details["documentation_file_name"], documentation_details["documentation_file_content"]))
+            else:
+                code_documentation_details.append((None, None, documentation_details["documentation_file_name"], documentation_details["documentation_file_content"]))
+    except Exception as e:
+        logging.warning(f"Error in db_get_documentation_and_file_details: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning(f"END: db_get_documentation_and_file_details.")
+    return code_documentation_details
+
+
 def update_database_by_dict(api_endpoint, prop_dict, method = "POST"):
     """
     Updates the database by sending a dict object to the specified API endpoint.
@@ -192,6 +239,7 @@ def update_user_request_status(user_request_id, action_status_dict):
         response = requests.get(api_endpoint)
         if response.status_code == 200:
             response_dict = response.json()
+            response_dict["zip_file_content"] = None
             response_dict.update(action_status_dict)
             
         api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{USER_REQUEST}/{user_request_id}"

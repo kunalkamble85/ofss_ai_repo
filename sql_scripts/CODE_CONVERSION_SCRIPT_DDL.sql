@@ -21,15 +21,6 @@ CREATE TABLE DOCUMENTATION_COMPONENTS (
     UPDATED_DATETIME DATE DEFAULT SYSDATE
 );
 
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/CoreBusinessObjectives.md','Core Business Objectives: What problem is the project solving? Provide Key Features & Functionalities.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/UserRolesInteractions.md','User Roles & Interactions: Identify the main users and how they interact with the system.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/DataFlowProcessing.md','Data Flow & Processing: Describe how data moves through the system and any critical transformations.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/ThirdPartyIntegration.md','Third Party Integration Points: Highlight dependencies on other systems or APIs.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/RegulatoryComplianceRequirements.md','Regulatory or Compliance Requirements: Any legal or compliance standards the system must adhere to if applicable.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/ScurityRequirements.md','Security Requirements: What are the security related information available.');
-INSERT INTO DOCUMENTATION_COMPONENTS(TARGET_FILE_NAME,DOCUMENTATION_COMPONENT) VALUES ('documentation/UserStories.md','List of User Strories: Provide a list of all the user stories summary or use cases that the system must support.');
-
-
 CREATE TABLE USER_REQUEST (
     USER_REQUEST_ID NUMBER PRIMARY KEY,
     ZIP_FILE_NAME VARCHAR2(255),

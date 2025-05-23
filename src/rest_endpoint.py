@@ -29,20 +29,13 @@ class UserRequest(BaseModel):
     llm_model: str = "meta.llama3.3-70b"
     test_mode: bool = False
     additional_context: str = None
-    documentation_components: str = []
+    documentation_components: list = []
+    user_query: str = None
 
 
 @app.get("/")
 async def root(test_mode: bool = False):
-    """
-    Root endpoint to check if the FastAPI service is running.
-
-    Args:
-        test_mode (bool): Indicates whether the service is running in test mode.
-
-    Returns:
-        dict: A message indicating the service status.
-    """
+    logging.warning(f"Input parameters for root: test_mode={test_mode}")
     logging.warning(f"START: root method with test_mode={test_mode}")
     response = {"message": "Fast API is running successfully."}
     logging.warning(f"END: root method with response={response}")
@@ -51,15 +44,7 @@ async def root(test_mode: bool = False):
 
 @app.post("/generate_analysis/")
 async def generate_analysis(user_request: UserRequest):
-    """
-    Endpoint to generate an analysis report for a given user request.
-
-    Args:
-        user_request (UserRequest): The user request containing the request ID, test mode, and additional context.
-
-    Returns:
-        dict: A response indicating the success or failure of the operation.
-    """
+    logging.warning(f"Input parameters for generate_analysis: user_request_id={user_request.user_request_id}, test_mode={user_request.test_mode}")
     user_request_id = user_request.user_request_id
     test_mode = user_request.test_mode
     logging.warning(f"START: generate_analysis method with user_request_id={user_request_id}, test_mode={test_mode}")
@@ -90,15 +75,7 @@ async def generate_analysis(user_request: UserRequest):
 
 @app.post("/generate_documentation/")
 async def generate_documentation(user_request: UserRequest):
-    """
-    Endpoint to generate a documentation report for a given user request.
-
-    Args:
-        user_request (UserRequest): The user request containing the request ID, test mode, LLM model, and additional context.
-
-    Returns:
-        dict: A response indicating the success or failure of the operation.
-    """
+    logging.warning(f"Input parameters for generate_documentation: user_request_id={user_request.user_request_id}, test_mode={user_request.test_mode}, llm_model={user_request.llm_model}, additional_context={user_request.additional_context}, documentation_components={user_request.documentation_components}")
     user_request_id = user_request.user_request_id
     test_mode = user_request.test_mode
     additional_context = user_request.additional_context
@@ -133,15 +110,7 @@ async def generate_documentation(user_request: UserRequest):
 
 @app.post("/generate_conversion/")
 async def generate_conversion(user_request: UserRequest):
-    """
-    Endpoint to generate a conversion report for a given user request.
-
-    Args:
-        user_request (UserRequest): The user request containing the request ID, test mode, LLM model, and additional context.
-
-    Returns:
-        dict: A response indicating the success or failure of the operation.
-    """
+    logging.warning(f"Input parameters for generate_conversion: user_request_id={user_request.user_request_id}, test_mode={user_request.test_mode}, llm_model={user_request.llm_model}, additional_context={user_request.additional_context}")
     user_request_id = user_request.user_request_id
     test_mode = user_request.test_mode
     additional_context = user_request.additional_context
@@ -170,4 +139,35 @@ async def generate_conversion(user_request: UserRequest):
             "error": str(e)
         }
         logging.warning(f"END: generate_conversion method with response={response}")
+        return response
+    
+
+@app.post("/handle_documentation_user_request/")
+async def handle_documentation_user_request_endpoint(user_request: UserRequest):
+    logging.warning(f"Input parameters for handle_documentation_user_request_endpoint: user_request_id={user_request.user_request_id}, llm_model={user_request.llm_model}, additional_context={user_request.additional_context}, user_query={user_request.user_query}")
+    user_request_id = user_request.user_request_id
+    additional_context = user_request.additional_context
+    llm_model = user_request.llm_model
+    user_query = user_request.user_query
+
+    logging.warning(f"START: handle_documentation_user_request_endpoint with user_request_id={user_request_id}")
+    try:
+        user_query_response = code_conversion_utils.handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query)
+        response = {
+            "user_request_id": user_request_id,
+            "success": True,
+            "error": None,
+            "user_query_response": user_query_response
+        }
+        logging.warning(f"END: handle_documentation_user_request_endpoint with response={response}")
+        return response
+    except Exception as e:
+        logging.warning(f"Error in handle_documentation_user_request_endpoint: {str(e)}")
+        response = {
+            "user_request_id": user_request_id,
+            "success": False,
+            "error": str(e),
+            "user_query_response": None
+        }
+        logging.warning(f"END: handle_documentation_user_request_endpoint with response={response}")
         return response

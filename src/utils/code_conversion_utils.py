@@ -24,8 +24,11 @@ ANGULER_JS_FILE_INCLUSIONS = ["png","jpg","jpeg","ts","js","html","css","xml","c
 ROUTER_FILE_FIND_STRING = "$urlRouterProvider"
 SAMPLE_REACT_PROJECT_PATH = "react_project"
 TEST_SIZE = 3
+INCLUDE_ALL_DOCUMENT_BY_DEFAULT = True
+REVIEW_LOOP_COUNT = 1
 
 def __get_details_from_repsonse(response):
+    logging.warning("START: __get_details_from_repsonse")
     """
     Extracts details such as target file name, folder path, and converted code from the response.
 
@@ -49,10 +52,12 @@ def __get_details_from_repsonse(response):
     if converted_code:
         converted_code =  converted_code.group(1)
     # logging.warning(converted_code) 
+    logging.warning("END: __get_details_from_repsonse")
     return target_file_name, target_folder_path, converted_code
 
 
 def get_view_controller_info(files_to_process, routing_information):
+    logging.warning("START: get_view_controller_info")
     """
     Maps view files to their corresponding controller files based on routing information.
 
@@ -85,10 +90,12 @@ def get_view_controller_info(files_to_process, routing_information):
         if gotController and gotView:
             view_controller_mapping[view_path] = controller
     logging.warning(f"view_controller_mapping:{view_controller_mapping}")
+    logging.warning("END: get_view_controller_info")
     return view_controller_mapping
 
 
 def generate_route_file(llm_model, files_to_process):
+    logging.warning("START: generate_route_file")
     """
     Generates the ReactJS route file from AngularJS routing information.
 
@@ -113,12 +120,15 @@ def generate_route_file(llm_model, files_to_process):
         target_file_to_create = "react_project/src/App.jsx"
         logging.warning(f"target_file_to_create:{target_file_to_create}")
         converted_code = converted_code.replace("```javascript","").replace("```","").replace("```jsx","").replace("```","").replace("jsx","")
+        logging.warning("END: generate_route_file")
         return user_request_details_id, file_name, target_file_to_create, view_controller_info, converted_code
     else:
+        logging.warning("END: generate_route_file")
         return None, None, None, None, None
 
 
 def handle_view_controller_files(llm_model, files_to_process, file_objects, target_folder_structure, view_controller_info, route_file_content, test_mode):
+    logging.warning("START: handle_view_controller_files")
     """
     Handles the conversion of view and controller files from AngularJS to ReactJS.
 
@@ -159,10 +169,12 @@ def handle_view_controller_files(llm_model, files_to_process, file_objects, targ
             output.append([controller_file_name, None, None, "N", error])
         if test_mode:
             break
+    logging.warning("END: handle_view_controller_files")
     return output, errors, target_folder_structure
 
 
 def get_number_of_tokens(file_content):
+    logging.warning("START: get_number_of_tokens")
     """
     Calculates the number of tokens in the given file content.
 
@@ -174,9 +186,11 @@ def get_number_of_tokens(file_content):
     """
     encoding = tiktoken.get_encoding("cl100k_base")
     tokens = encoding.encode(file_content)
+    logging.warning("END: get_number_of_tokens")
     return len(tokens)
 
 def get_files_from_database(user_request_id, exclude_files=FILE_EXCLUSIONS, include_files=None, include_empty_folders = False, skip_test_files = True):
+    logging.warning("START: get_files_from_database")
     """
     Fetches files from the database for a given user request ID.
 
@@ -205,9 +219,11 @@ def get_files_from_database(user_request_id, exclude_files=FILE_EXCLUSIONS, incl
             files_to_process[user_request_details_id] = (file_name, file_content)
     if include_empty_folders and file_name.endswith("/"):
         dirs.append(file_name)
+    logging.warning("END: get_files_from_database")
     return files_to_process, dirs, file_objects
 
 def get_files_from_directory(folder_path, exclude_files = None, include_files = None, include_empty_folders = False):
+    logging.warning("START: get_files_from_directory")
     """
     Fetches files from a directory based on inclusion and exclusion criteria.
 
@@ -230,6 +246,7 @@ def get_files_from_directory(folder_path, exclude_files = None, include_files = 
     if include_empty_folders:
         dirs = [i[0] for i in os.walk(folder_path)]
         filtered_files = filtered_files + dirs
+    logging.warning("END: get_files_from_directory")
     return filtered_files
 
     
@@ -303,7 +320,64 @@ def generate_analysis_report(user_request_id, test_mode):
         logging.warning(f"END: generate_analysis_report with user_request_id={user_request_id}. Total time taken: {total_time:.2f} seconds")
 
 
-def generate_brd_report(llm_model, documentation_content, user_documentation_components):
+def split_documentations(documentation_content_list):
+    logging.warning("START: split_documentations")
+    """
+    Splits a list of documentation strings into multiple strings, each within the 100,000 token limit.
+
+    Args:
+        documentation_content_list (list): List of documentation strings.
+
+    Returns:
+        list: List of strings, each within the token limit.
+    """
+    max_tokens = 100000
+    result = []
+    current_chunk = []
+    current_tokens = 0
+    for doc in documentation_content_list:
+        doc_tokens = get_number_of_tokens(doc)
+        if current_tokens + doc_tokens > max_tokens:
+            if current_chunk:
+                result.append("\n".join(current_chunk))
+            current_chunk = [doc]
+            current_tokens = doc_tokens
+        else:
+            current_chunk.append(doc)
+            current_tokens += doc_tokens
+    if current_chunk:
+        result.append("\n".join(current_chunk))
+    logging.warning("END: split_documentations")
+    return result
+
+
+def run_doc_generation_in_feedback_loop(component_doc_name, generation_prompt, llm_model, documentation_content, additional_context):
+    logging.warning("START: run_doc_generation_in_feedback_loop")
+    doc_chat_messages = []
+    doc_chat_messages.append({"role": "user", "content": generation_prompt})
+    review_count = 0
+    component_content = ""
+    while True:                
+        component_content = generate_oci_gen_ai_response(llm_model, doc_chat_messages)
+        doc_chat_messages.append({"role": "assistant", "content": component_content})
+        # Do review         
+        if review_count == REVIEW_LOOP_COUNT: break        
+        else: review_count = review_count + 1 
+        logging.warning(f"Running Documentation Review for: {component_doc_name}")
+        review_prompt = prompts.get_review_prompt(documentation_content, additional_context, component_content)
+        review_comments = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": review_prompt}])
+        generation_prompt_with_review = f"""Below is my review comments, please finetune your response accordingly. 
+        Do not put any unnecessary commentary. Provide answer in originally asked format. 
+        ### Review Comments
+        {review_comments}
+        """
+        doc_chat_messages.append({"role": "user", "content": generation_prompt_with_review})
+    logging.warning("END: run_doc_generation_in_feedback_loop")
+    return component_content
+
+
+def generate_brd_report(llm_model, documentation_content_list, user_documentation_components, additional_context, existing_analysis_report_list):
+    logging.warning("START: generate_brd_report")    
     db_documentation_components_details = database_utils.db_get_documentation_components()
     """
     Generates a Business Requirement Document (BRD) based on the provided documentation content.
@@ -311,30 +385,62 @@ def generate_brd_report(llm_model, documentation_content, user_documentation_com
     logging.warning(f"Generating BRD content for the documentation.")
 
     documentation_components = []
-    if len(user_documentation_components) == 0:
-        for db_documentation_components_detail in db_documentation_components_details:
-            documentation_components.append((db_documentation_components_detail["target_file_name"], 
-                                        db_documentation_components_detail["documentation_component"]))
+
+    if len(user_documentation_components) == 0 and INCLUDE_ALL_DOCUMENT_BY_DEFAULT:
+            for db_documentation_components_detail in db_documentation_components_details:
+                documentation_components.append((db_documentation_components_detail["target_file_name"], 
+                                            db_documentation_components_detail["documentation_component"], db_documentation_components_detail["prompt"]))
     else:
         for user_documentation_component_id in user_documentation_components:
             for db_documentation_components_detail in db_documentation_components_details:
                 if user_documentation_component_id == db_documentation_components_detail["documentation_components_id"]:
                     documentation_components.append((db_documentation_components_detail["target_file_name"], 
-                                        db_documentation_components_detail["documentation_component"]))
+                                        db_documentation_components_detail["documentation_component"], db_documentation_components_detail["prompt"]))
                     break
     
     brds = []
-    for component_doc_name, component in documentation_components:
+    brd_contents = ""
+    splitted_documentation_content_list = split_documentations(documentation_content_list)
+    for component_doc_name, component, component_prompt in documentation_components:
         logging.warning(f"Generating BRD content for {component}.")
-        brd_generation_prompt = prompts.get_brd_generation_prompt("\n".join(documentation_content), component)
-        component_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": brd_generation_prompt}])
-        brds.append((component_doc_name, component_content))
-    
-    return brds
+        documentation_already_generated = False
+        for _, _, documentation_file_name, documentation_file_content in existing_analysis_report_list:
+            if component_doc_name == documentation_file_name:
+                documentation_already_generated = True
+                break
+        if documentation_already_generated:
+            logging.warning(f"Documentation is already generated for {component}.")
+            # Commented otherwise it will save again into database
+            # brds.append((component_doc_name, documentation_file_content))
+            brd_contents = f"{brd_contents}\n\n{documentation_file_content}" 
+        else:
+            component_contents = [] 
+            counter = 1       
+            for documentation_content in splitted_documentation_content_list:
+                logging.warning(f"Started documentating split for counter: {counter}")
+                counter = counter + 1
+                if "BusinessRequirementDocument" in component_doc_name:
+                    generation_prompt = prompts.get_brd_generation_prompt(documentation_content, additional_context)
+                else:
+                    generation_prompt = component_prompt.replace("$DOCUMENTATION$", documentation_content)
+                
+                component_content = run_doc_generation_in_feedback_loop(component_doc_name, generation_prompt, llm_model,documentation_content, additional_context)
+                component_contents.append(component_content)  
+            if len(component_contents) > 1:
+                component_content_reponse = "\n".join(component_contents)
+                document_consolidation_prompt = prompts.get_document_consolidation_prompt(component_content_reponse, additional_context)                  
+                component_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_consolidation_prompt}])
+                brd_contents = f"{brd_contents}\n\n{component_content}" 
+            else:
+                brd_contents = f"{brd_contents}\n\n{component_contents[0]}"
+            brds.append((component_doc_name, "\n\n\n".join(component_contents)))
 
+    logging.warning("END: generate_brd_report")
+    return brds, brd_contents
 
 
 def md_to_docx_content(md_content):
+    logging.warning("START: md_to_docx_content")
     """
     Converts a markdown string to a docx Document object and returns the binary content.
 
@@ -381,18 +487,22 @@ def md_to_docx_content(md_content):
     # Save to BytesIO and return bytes
     output = BytesIO()
     doc.save(output)
+    logging.warning("END: md_to_docx_content")
     return base64.b64encode(output.getvalue()).decode("utf-8")
     # with open("output.docx", "wb") as f:
     #     f.write(output.getvalue())
     # return output.getvalue()
 
 def generate_docx_from_md(df):
+    logging.warning("START: generate_docx_from_md")
     df['documentation_file_name_docx'] = df['documentation_file_name'].apply(lambda x: x.replace('.md', '.docx') if x.endswith('.md') else x + '.docx')
     df['documentation_file_content_docx'] = df['documentation_file_content'].apply(md_to_docx_content)
+    logging.warning("END: generate_docx_from_md")
     return df
 
 
 def generate_documentation_report(llm_model, user_request_id, test_mode, additional_context, documentation_components):
+    logging.warning("START: generate_documentation_report")
     """
     Generates a documentation report for the files associated with a given user request ID.
 
@@ -410,6 +520,8 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
     try:
         database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"In-Progress", "error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
+        existing_analysis_report_list = database_utils.db_get_documentation_and_file_details(user_request_id)
+
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
         source_language = database_utils.get_language_details(db_user_request["source_lang_id"])
@@ -426,36 +538,46 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
         errors = []
         df = pd.DataFrame(columns=['user_request_details_id', 'user_request_id', 'documentation_file_name', 'documentation_file_content', 'success_flag', 'error_details', 'updated_by'])
         data_counter = 0
-        documentation_content = []
+        documentation_content_list = []
 
         for user_request_details_id, (file_name, file_content) in files_to_process.items():
             try:
                 logging.warning(f"Processing file: {file_name}")
-                document_generation_prompt = prompts.get_document_generation_prompt(source_language, files_to_process, file_name, file_content, additional_context)
-                response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_generation_prompt}])
-                
-                target_file = f"documentation/{file_name}"
-                if "." in target_file:
-                    extension = target_file.split(".")[-1]
-                    target_file = target_file.replace(f".{extension}", "_documentation.md")
+                analysis_already_done = False
+                for analysis_report_file_name, _, documentation_file_name, documentation_file_content in existing_analysis_report_list:
+                    if analysis_report_file_name == file_name:
+                        analysis_already_done = True
+                        break
+                if analysis_already_done:
+                    logging.warning(f"Documentation is already generated for this file: {file_name}")
+                    documentation_content_list.append(f"File:{documentation_file_name}\nContent of file:\n{documentation_file_content}")
                 else:
-                    target_file = target_file + "_documentation.md"
+                    document_generation_prompt = prompts.get_document_generation_prompt(source_language, files_to_process, file_name, file_content, additional_context)
+                    response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_generation_prompt}])
+                    
+                    
+                    if "." in target_file:
+                        extension = target_file.split(".")[-1]
+                        target_file = target_file.replace(f".{extension}", "_documentation.md")
+                    else:
+                        target_file = target_file + "_documentation.md"
 
-                logging.warning(f"Generated documentation for file: {file_name}, Target file: {target_file}")
-                documentation_content.append(f"File:{target_file}\nContent of file:\n{response}")
-                df.loc[data_counter] = [user_request_details_id, user_request_id, target_file, response, "Y", None, updated_by]
-                data_counter += 1
+                    logging.warning(f"Generated documentation for file: {file_name}, Target file: {target_file}")
+                    documentation_content_list.append(f"File:{target_file}\nContent of file:\n{response}")
+                    df.loc[data_counter] = [user_request_details_id, user_request_id, target_file, response, "Y", None, updated_by]
+                    data_counter += 1
 
-                if test_mode and data_counter >= TEST_SIZE:
-                    logging.warning("Test mode enabled, stopping after processing 3 files.")
-                    break
+                    if test_mode and data_counter >= TEST_SIZE:
+                        logging.warning("Test mode enabled, stopping after processing 3 files.")
+                        break
             except Exception as e:
                 logging.warning(f"Error processing file {file_name}: {str(e)}")
                 logging.warning(traceback.format_exc())
                 errors.append(file_name)
 
-        brd_reponse = generate_brd_report(llm_model, documentation_content, documentation_components)
+        brd_reponse, brd_contents = generate_brd_report(llm_model, documentation_content_list, documentation_components, additional_context, existing_analysis_report_list)
         for (component_doc_name, component_content) in brd_reponse:
+            if "BusinessRequirementDocument" in  component_doc_name: component_content = brd_contents
             df.loc[data_counter] = [None, user_request_id, component_doc_name, component_content, "Y", None, updated_by]
             data_counter += 1
         logging.warning(f"Errors encountered: {errors}")
@@ -474,7 +596,50 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
         logging.warning(f"END: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}. Total time taken: {total_time:.2f} seconds")
 
 
+def handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query):
+    logging.warning("START: handle_documentation_user_request")
+    try:
+        db_user_request = database_utils.db_get_user_request(user_request_id)
+        updated_by = db_user_request["updated_by"]
+
+        code_documentation_details = database_utils.db_get_documentation_and_file_details(user_request_id)
+        if len(code_documentation_details) == 0:
+            return "Documentation is not generated for the code. Please generate the documentation first and then re-run the user query."
+        context_list = []
+        for file_name, file_code_content, _, documentation_file_content in code_documentation_details:
+            # This means its BRD level document so continue
+            if file_name is None: continue
+            context_list.append(f"File Name:{file_name}\n\nCode:{file_code_content}\n\nCode Documentation:{documentation_file_content}")
+        
+        splitted_documentation_content_list = split_documentations(context_list)
+        user_query_contents = []  
+        user_query_content = ""
+        for documentation_content in splitted_documentation_content_list:
+            user_query_generation_prompt = prompts.get_user_query_prompt(documentation_content, additional_context, user_query)
+            user_query_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": user_query_generation_prompt}])
+            user_query_contents.append(user_query_content)
+
+        if len(user_query_contents) > 1:
+            user_query_content_reponse = "\n".join(user_query_contents)
+            document_consolidation_prompt = prompts.get_document_consolidation_prompt(user_query_content_reponse, additional_context)                  
+            user_query_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_consolidation_prompt}])
+        
+        df = pd.DataFrame(columns=['user_request_details_id', 'user_request_id', 'documentation_file_name', 'documentation_file_content', 'success_flag', 'error_details', 'updated_by'])
+        
+        timestamp = int(time.time())
+        df.loc[0] = [None, user_request_id, f"documentation/UserQuery_{timestamp}.md", user_query_content.replace("## Answer","## Details of your Query"), "Y", None, updated_by]
+        df = generate_docx_from_md(df)
+        database_utils.update_documentation_report(df)
+        logging.warning("END: handle_documentation_user_request")
+        return user_query_content
+    except Exception as e:
+        logging.warning(f"Error in handle_documentation_user_request: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+
+
 def generate_conversion_report(llm_model, user_request_id, test_mode, additional_context):
+    logging.warning("START: generate_conversion_report")
     """
     Converts AngularJS code to ReactJS for a given user request ID.
 
@@ -582,7 +747,22 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
             if test_mode and data_counter >= TEST_SIZE:
                 logging.warning("Test mode enabled, stopping after processing 3 files.")
                 break
-
+        
+        # Add files from react_project folder into df entries
+        react_project_files = get_files_from_directory(SAMPLE_REACT_PROJECT_PATH, exclude_files=None, include_files=None, include_empty_folders=False)
+        for file_path in react_project_files:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_content = f.read()
+                rel_path = file_path.replace("\\", "/")
+                df.loc[data_counter] = [None, user_request_id, rel_path, file_content, "Y", None, updated_by]
+                data_counter += 1
+            except Exception as e:
+                error = str(e)
+                logging.warning(f"Error reading react_project file {file_path}: {error}")
+                logging.warning(traceback.format_exc())
+                df.loc[data_counter] = [None, user_request_id, file_path, None, "N", error, updated_by]
+                data_counter += 1
         logging.warning(f"Errors encountered: {errors}")
         logging.warning(f"Completed converting code from: {source_language} to {target_language} for package_name: {package_name}")
         database_utils.update_conversion_report(df)
@@ -596,4 +776,3 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
         end_time = time.time()
         total_time = end_time - start_time
         logging.warning(f"END: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}. Total time taken: {total_time:.2f} seconds")
-

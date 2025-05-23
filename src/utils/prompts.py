@@ -9,68 +9,248 @@ def get_document_generation_prompt(source_language, files_to_process, file_name,
         project_structure = project_structure + f"\n{file}"
     
     document_generation_prompt = f"""
-    You are an expert software documentation generator. 
-    Given the following code and project file structure, analyze and extract key information to generate a structured file-level documentation. 
-    The documentation should include:
-    File Overview: A brief summary of the purpose and functionality of the file.
-    UI Components (if applicable): List any frontend components, frameworks, or libraries used. Describe their role and interactions.
-    Services & APIs (if applicable): Identify any internal or external services the file interacts with. Specify API endpoints, HTTP methods, request/response structures, and key functionalities.
-    Database Interactions (if applicable): Extract details about database queries, tables, stored procedures, or ORM models used. Include schema details if possible.
-    Other Integrations (if applicable): Mention any third-party libraries, messaging queues, authentication mechanisms, or infrastructure dependencies involved.
-    Key Functions & Classes: Summarize the core functions, classes, and business logic present in the file. Provide a high-level explanation of their roles.
-    Configuration & Environment Variables: Identify any configurations, feature flags, or environment variables required for execution.
-    Error Handling & Logging: Describe how errors are managed and how logging is implemented.
-    Format the response in a structured Markdown format for easy readability.
-    Only provide documentation on given file contents and do not generate any content outside of this information provided, this is super important while generating your response.
-    """
-    if additional_context: document_generation_prompt = document_generation_prompt + f"\nAdditional Context: {additional_context}"
+	You are a technical analyst assisting in generating business documentation from source code.
+	The following is the content of a code file from a larger software project. Your task is to extract relevant information that will later help generate business requirement documents (BRDs) and user stories.
+	Focus on translating low-level implementation details into higher-level functional and business context, suitable for stakeholders like Product Owners, Business Analysts, or Delivery Managers.
+    Do not generate anything outside of this documentation.
 
-    document_generation_prompt = f"""
-    {document_generation_prompt}
+    ### Input:
+        File Name: {file_name}
+        File Content:
+        {file_content}
+        
+        My Project is using {source_language} programming language.
+        {"" if additional_context is None else {"Additional Context:" + additional_context}}
+
+        Project File Structure:
+        {project_structure}
+
+	### For each file, extract the following in clear, structured form:
+
+	1. **Purpose of the File**  
+	   - What is this file responsible for?
+	   - How does it contribute to the overall application?
+
+	2. **Key Responsibilities / Logic Implemented**  
+	   - Summarize the main logic, workflows, or operations in simple terms.
+	   - Mention any input/output handling, validations, data processing, etc.
+
+    3. **UI Components** (if applicable): 
+       - List any frontend components, frameworks, or libraries used. Describe their role and interactions. 
     
-    My Project is using {source_language} programming language.    
-    Project File Structure:
-    {project_structure}
-    
-    File Name: {file_name}
-    File Content:
-    {file_content}
+    4. **Key Functions & Classes**: 
+       - Summarize the core functions, classes, and business logic present in the file. Provide a high-level explanation of their roles.
+	
+    5. **User or Business Impact**  
+	   - Describe what feature or user interaction this supports.
+	   - How does this help fulfill a business or user need?
+
+	6. **Dependencies / Interactions**  
+	   - What modules, services, or components does this file rely on?
+	   - What external systems or APIs does it interact with?
+       - Database Interactions
+
+    7. **Configuration & Environment Variables
+       - Identify any configurations, feature flags, or environment variables required for execution.
+
+    8. **Error Handling & Logging**
+       - Describe how errors are managed and how logging is implemented.
+
+	### Output Format:
+	Respond in **Markdown** using the structure below.
+
+	## File: [filename or path]
+
+	### 1. Purpose of the File
+	[Explanation]
+
+	### 2. Key Responsibilities / Logic Implemented
+	- [Responsibility 1]
+	- [Responsibility 2]
+
+    ### 3. *UI Components
+	- [Any textboxes, Checkbox, label, buttons and more html components]
+
+    ### 4. *Key Functions & Classes
+	- [Describe keywords technical keyword used and usage]
+
+	### 5. User or Business Impact
+	[Describe the user-facing or business-relevant purpose of this functionality.]
+
+	### 6. Dependencies / Interactions
+	- Depends on: [list modules/services]
+	- Interacts with: [list APIs/external systems]
+
+    ### 7. Configuration & Environment Variables
+    [Identify any configurations, feature flags, or environment variables required for execution]
+
+    ### 8. Error Handling & Logging
+    [Describe how errors are managed and how logging is implemented]
+
+    Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
     """
     return document_generation_prompt
 
-def get_brd_generation_prompt(documentation_content, component):
-    brd_generation_prompt = f"""
-    You are a technical documentation expert. You are given:
-    1. Concatenated documentation generated from code files related to a single software component.
-    2. A specific user request asking for certain details about that component.
 
-    Your task is to extract or synthesize detailed documentation that directly addresses the user's request using the provided documentation.
-    
-    Here is the concatenated documentation:
+def get_brd_generation_prompt(documentation_content, additional_context):
+    brd_generation_prompt = f"""
+    You are a Business Analyst generating a **Business Requirement Document (BRD)** based on detailed technical documentation provided from a software project. This documentation is extracted file by file, including the purpose, responsibilities, business impact, and dependencies of each file/module.
+    Your task is to consolidate and translate this technical information into a coherent and stakeholder-friendly BRD that includes the following sections:
+    Do not generate anything outside of this documentation.
+    ### Input:
     {documentation_content}
 
-    A specific user request to extract:
-    {component}
+    {"" if additional_context is None else {"Additional Context:" + additional_context}}
 
-    - Organize the output clearly and concisely, using bullet points, headings, or code snippets as appropriate.
-    - Only provide documentation on given file contents and do not generate any content outside of this information provided, this is super important while generating your response.
-    - Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
+    ### Desired Output Format (in Markdown):
+
+    # Business Requirement Document (BRD)
+
+    ## 1. Project Overview
+    Provide a high-level summary of what the project is, what problems it solves, and its business goals.
+
+    ## 2. Core Business Objectives
+    Summarize the key business drivers, goals, or user needs that this solution addresses.
+
+    ## 3. Functional Scope
+    List the main business capabilities and functionalities delivered by the system, structured as sub-sections where relevant.
+
+    ## 4. System Features & Descriptions
+    Detail the functional modules, their responsibilities, and user-facing outcomes. Use the file-by-file documentation to build this section. Present each module or component with:
+    - Feature Name
+    - Description
+    - Business Use Case
+    - Dependencies or external interactions
+
+    ## 5. UI Screen Details:
+    - Screen Name
+    - Description
+    - UI Components (textbox, label, dropdown, checkbox, buttons and other html components)
+        - details of each component 
+
+    ## 6. Assumptions and Constraints
+    Mention any business or technical assumptions, limitations, or required conditions based on the documentation.
+
+    ## 7. Stakeholders and Impacted Users
+    (Optional if inferable) List the primary users, departments, or roles impacted or served by this project.
+
+    Use simple, clear language appropriate for business and product stakeholders. Avoid code references unless necessary to clarify a feature or behavior.
+    Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
     """
     return brd_generation_prompt
 
+def get_user_query_prompt(documentation_content, additional_context, user_query):
+    user_query_prompt = f"""
+    You are an expert business and technical analyst.
+    Below is a business functionality or technical documentation extracted from a software project. A user has a specific question about this documentation.
+    Do not generate anything outside of this documentation.
 
-def get_user_stories_generation_prompt(documentation_content):
-    template = f"""
-        You are an certified product owner of Agile Scrum methodology and you know how to write perfect User Story for Agile Scrum process. 
-        I would be providing you the Buiness Use Case. Understand the context of use case and generate User Stories.
-        Format the response in a structured Markdown format for easy readability without any unnecessary commentary.
-        Do not generate unnecessary commentary in your answer.
-        Only generate functional User Stories nothing else.
-        Buiness Use Case:
-        {documentation_content}
+    ### Your Task:
+    - Analyze the documentation and provide a **detailed, accurate, and clear** answer to the user's question.
+    - Use business-friendly language where appropriate.
+    - If the answer involves multiple parts or components, use bullet points or subheadings for clarity.
+    - If the answer is not directly found in the document, infer from related content and mention that the answer is inferred.
+
+    ### Response Format: Markdown
+
+    ### User Question:
+    {user_query}
+
+    ### Documentation Context:
+    {documentation_content}
+
+    {"" if additional_context is None else {"Additional Context:" + additional_context}}
+
+    ### Output Format:
+
+    ### Below is the required Information as per given project code
+    [Direct, specific, well-structured response to the user's question.]
+
+    ### Related Information (if helpful)
+    - [Supporting module, feature, or interaction]
+    - [Reference to where in the document the info was found or inferred from]
     """
-    return template
+    return user_query_prompt
 
+
+def get_document_consolidation_prompt(documentation_content, additional_context):
+    document_consolidation_prompt = f"""
+    You are an expert business documentation analyst.
+
+    The input below contains multiple business functionality documents, each describing features, use cases, and user impact for different (but possibly overlapping) modules of a software system. These documents may contain:
+    - Redundant or similar content under different headings.
+    - Varying levels of detail or naming for the same feature.
+    - Disjointed structure across documents.
+
+    Do not generate anything outside of this documentation.
+
+    ### Input:
+    {documentation_content}
+
+    {"" if additional_context is None else {"Additional Context:" + additional_context}}
+
+    ### Your Task:
+    Carefully read and consolidate the input documents into one **comprehensive, deduplicated, and well-organized** business functionality document.
+
+    ### Requirements:
+    1. **Merge Similar Sections**  
+    - Combine overlapping content into unified sections.
+    - Use the most detailed or accurate descriptions where duplication exists.
+
+    2. **Organize Logically**  
+    - Group features or functionality under intuitive, clearly named sections.
+    - Maintain a logical flow from business goals to features and interactions.
+
+    3. **Enhance Clarity & Detail**  
+    - Rewrite or expand summaries for better business understanding.
+    - Add bullet points or sub-sections where helpful.
+
+    4. **Output Format: Markdown**
+    """
+    return document_consolidation_prompt
+
+def get_review_prompt(documentation_content, additional_context, llm_response):
+    review_prompt = f"""
+    You are a senior business analyst and domain expert tasked with reviewing a business functionality document.
+    The document below was created from code-level or module-level analysis, and your job is to evaluate the **quality of the output** based on the following criteria:
+    Do not suggest anything from outside of this documentation.
+
+    {"" if additional_context is None else {"Additional Context of the project:" + additional_context}}
+
+    ### Documentation Provided:
+    {documentation_content}
+
+    ### Created Documentation by business analyst:
+    {llm_response}
+
+    ### Review Criteria:
+
+    1. **Accuracy**  
+    - Does the document correctly describe the functionalities based on the input?
+    - Are the business use cases and module purposes described precisely?
+
+    2. **Completeness**  
+    - Are all relevant features, modules, and interactions captured?
+    - Are any important elements missing or overly summarized?
+
+    3. **Clarity & Readability**  
+    - Is the language easy to understand for business and product stakeholders?
+    - Are sections logically structured and labeled appropriately?
+
+    4. **Business Relevance**  
+    - Do the described features clearly tie to business needs, user goals, or outcomes?
+    - Are the business objectives and impacts well aligned with the features?
+
+    5. **Duplication or Redundancy**  
+    - Are there repeated sections or redundant descriptions that need merging?
+    - Could similar items be grouped or unified for better flow?
+
+    ### Your Task:
+    Provide a constructive review of the created document using the criteria above. 
+    Summarize what is done well and what needs improvement. Suggest specific changes where applicable.
+    Just provide review comments without additonal commentary.
+    """
+    return review_prompt
 
 
 def get_ang_to_react_code_conversion_prompt(files_to_process, file_name,  file_content, additional_context):
