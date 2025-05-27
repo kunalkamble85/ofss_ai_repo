@@ -104,22 +104,27 @@ def generate_embeddings(inputs):
     Handles a maximum of 96 inputs at a time.
 
     Args:
-        inputs (list): List of input strings to generate embeddings for.
+        inputs (dict): Dictionary mapping id to text to generate embeddings for.
 
     Returns:
-        dict: Dictionary mapping input text to its embedding.
+        dict: Dictionary mapping id to embedding.
     """
     logging.warning("START: generate_embeddings")
     logging.info(f"Input Length for embedding: {len(inputs)}")
     max_batch_size = 96
     embeddings_dict = {}
 
+    # Convert dict to list of (id, text) tuples
+    items = list(inputs.items())
+
     # Process inputs in batches of max_batch_size
-    for i in range(0, len(inputs), max_batch_size):
-        batch = inputs[i:i+max_batch_size]
+    for i in range(0, len(items), max_batch_size):
+        batch = items[i:i+max_batch_size]
+        ids = [item[0] for item in batch]
+        texts = [item[1] for item in batch]
         embed_text_detail = oci.generative_ai_inference.models.EmbedTextDetails()
         embed_text_detail.serving_mode = oci.generative_ai_inference.models.OnDemandServingMode(model_id="cohere.embed-english-v3.0")
-        embed_text_detail.inputs = batch
+        embed_text_detail.inputs = texts
         embed_text_detail.truncate = "NONE"
         embed_text_detail.compartment_id = compartment_id
         embed_text_response = generative_ai_inference_client.embed_text(embed_text_detail)
@@ -127,12 +132,12 @@ def generate_embeddings(inputs):
         logging.info(f"Number of embeddings generated in batch: {len(embed_text_response.data.embeddings)}")
         if embed_text_response.data.embeddings:
             logging.info(f"First embedding in batch: {embed_text_response.data.embeddings[0]}")
-        # Map each input text to its embedding
-        for text, embedding in zip(batch, embed_text_response.data.embeddings):
-            embeddings_dict[text] = embedding
+        # Map each id to embedding
+        for id_val, embedding in zip(ids, embed_text_response.data.embeddings):
+            embeddings_dict[id_val] = embedding
 
     logging.warning("END: generate_embeddings")
     return embeddings_dict
 
-# inputs = ["Hello, How Are you?", "I am Kunal"]
+# inputs = {1:"Hello, How Are you?", 2:"I am Kunal"}
 # print(generate_embeddings(inputs))

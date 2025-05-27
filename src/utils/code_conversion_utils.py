@@ -2,7 +2,7 @@ import traceback
 import pandas as pd
 import os
 import tiktoken
-from oci_utils import generate_oci_gen_ai_response
+from oci_utils import generate_oci_gen_ai_response, generate_embeddings
 import re
 import json
 import database_utils
@@ -264,8 +264,12 @@ def generate_analysis_report(user_request_id, test_mode):
     logging.warning(f"START: generate_analysis_report with user_request_id={user_request_id}")
     start_time = time.time()
     try:
-        database_utils.update_user_request_status(user_request_id, {"analysis_request_status":"In-Progress","error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
+        if db_user_request["analysis_request_status"] == "In-Progress":
+            logging.warning(f"Analysis process is already running for the request ID:{user_request_id}")
+            return
+                
+        database_utils.update_user_request_status(user_request_id, {"analysis_request_status":"In-Progress","error_message":None})
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
         logging.warning(f"Package name: {package_name}, Updated by: {updated_by}")
@@ -518,8 +522,11 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
     logging.warning(f"START: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}")
     start_time = time.time()
     try:
-        database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"In-Progress", "error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
+        if db_user_request["documentation_request_status"] == "In-Progress":
+            logging.warning(f"Documentation process is already running for the request ID:{user_request_id}")
+            return
+        database_utils.update_user_request_status(user_request_id, {"documentation_request_status":"In-Progress", "error_message":None})        
         existing_analysis_report_list = database_utils.db_get_documentation_and_file_details(user_request_id)
 
         package_name = db_user_request["zip_file_name"].split(".")[0]
@@ -554,13 +561,12 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
                 else:
                     document_generation_prompt = prompts.get_document_generation_prompt(source_language, files_to_process, file_name, file_content, additional_context)
                     response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_generation_prompt}])
-                    
-                    
-                    if "." in target_file:
-                        extension = target_file.split(".")[-1]
-                        target_file = target_file.replace(f".{extension}", "_documentation.md")
+                                        
+                    if "." in file_name:
+                        extension = file_name.split(".")[-1]
+                        target_file = file_name.replace(f".{extension}", "_documentation.md")
                     else:
-                        target_file = target_file + "_documentation.md"
+                        target_file = file_name + "_documentation.md"
 
                     logging.warning(f"Generated documentation for file: {file_name}, Target file: {target_file}")
                     documentation_content_list.append(f"File:{target_file}\nContent of file:\n{response}")
@@ -596,42 +602,53 @@ def generate_documentation_report(llm_model, user_request_id, test_mode, additio
         logging.warning(f"END: generate_documentation_report with user_request_id={user_request_id}, test_mode={test_mode}. Total time taken: {total_time:.2f} seconds")
 
 
-def handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query):
+def handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query, use_embedding):
     logging.warning("START: handle_documentation_user_request")
-    try:
-        db_user_request = database_utils.db_get_user_request(user_request_id)
-        updated_by = db_user_request["updated_by"]
-
+    try:        
         code_documentation_details = database_utils.db_get_documentation_and_file_details(user_request_id)
         if len(code_documentation_details) == 0:
             return "Documentation is not generated for the code. Please generate the documentation first and then re-run the user query."
+    
+        if use_embedding:
+            embedding_pending_docs = database_utils.db_get_documentation_for_embedding()
+            embedding_pending_docs = [entry for entry in embedding_pending_docs if entry.get("documentation_file_content") and entry.get("user_request_details_id")]
+            # No records for embedding, means embedding is available
+            if len(embedding_pending_docs) == 0:
+                embeddings = generate_embeddings({1: user_query})
+                code_documentation_details = database_utils.get_similarity_searched_documents(embeddings[1], user_request_id)
+            
         context_list = []
-        for file_name, file_code_content, _, documentation_file_content in code_documentation_details:
+        for file_name, file_code_content, doc_file_name, documentation_file_content in code_documentation_details:
             # This means its BRD level document so continue
             if file_name is None: continue
+            logging.warning(f"file_name: {file_name}")
+            # logging.warning(f"file_code_content: {file_code_content}")
+            logging.warning(f"doc_file_name: {doc_file_name}")
+            # logging.warning(f"documentation_file_content: {documentation_file_content}")
             context_list.append(f"File Name:{file_name}\n\nCode:{file_code_content}\n\nCode Documentation:{documentation_file_content}")
         
         splitted_documentation_content_list = split_documentations(context_list)
-        user_query_contents = []  
-        user_query_content = ""
+        user_query_contents = [] 
+        user_query_response = ""             
         for documentation_content in splitted_documentation_content_list:
             user_query_generation_prompt = prompts.get_user_query_prompt(documentation_content, additional_context, user_query)
-            user_query_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": user_query_generation_prompt}])
-            user_query_contents.append(user_query_content)
+            user_query_response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": user_query_generation_prompt}])
+            user_query_contents.append(user_query_response)
 
         if len(user_query_contents) > 1:
             user_query_content_reponse = "\n".join(user_query_contents)
             document_consolidation_prompt = prompts.get_document_consolidation_prompt(user_query_content_reponse, additional_context)                  
-            user_query_content = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_consolidation_prompt}])
+            user_query_response = generate_oci_gen_ai_response(llm_model, [{"role": "user", "content": document_consolidation_prompt}])
         
-        df = pd.DataFrame(columns=['user_request_details_id', 'user_request_id', 'documentation_file_name', 'documentation_file_content', 'success_flag', 'error_details', 'updated_by'])
-        
-        timestamp = int(time.time())
-        df.loc[0] = [None, user_request_id, f"documentation/UserQuery_{timestamp}.md", user_query_content.replace("## Answer","## Details of your Query"), "Y", None, updated_by]
-        df = generate_docx_from_md(df)
-        database_utils.update_documentation_report(df)
+        # db_user_request = database_utils.db_get_user_request(user_request_id)
+        # updated_by = db_user_request["updated_by"]
+        # df = pd.DataFrame(columns=['user_request_details_id', 'user_request_id', 'documentation_file_name', 'documentation_file_content', 'success_flag', 'error_details', 'updated_by'])        
+        # timestamp = int(time.time())
+        # df.loc[0] = [None, user_request_id, f"documentation/UserQuery_{timestamp}.md", user_query_response.replace("## Answer","## Details of your Query"), "Y", None, updated_by]
+        # df = generate_docx_from_md(df)
+        # database_utils.update_documentation_report(df)
         logging.warning("END: handle_documentation_user_request")
-        return user_query_content
+        return user_query_response
     except Exception as e:
         logging.warning(f"Error in handle_documentation_user_request: {str(e)}")
         logging.warning(traceback.format_exc())
@@ -655,8 +672,11 @@ def generate_conversion_report(llm_model, user_request_id, test_mode, additional
     logging.warning(f"START: generate_conversion_report with user_request_id={user_request_id}, test_mode={test_mode}")
     start_time = time.time()
     try:
-        database_utils.update_user_request_status(user_request_id, {"conversion_request_status":"In-Progress","error_message":None})
         db_user_request = database_utils.db_get_user_request(user_request_id)
+        if db_user_request["conversion_request_status"] == "In-Progress":
+            logging.warning(f"Conversion process is already running for the request ID:{user_request_id}")
+            return
+        database_utils.update_user_request_status(user_request_id, {"conversion_request_status":"In-Progress","error_message":None})
         package_name = db_user_request["zip_file_name"].split(".")[0]
         updated_by = db_user_request["updated_by"]
         source_language = database_utils.get_language_details(db_user_request["source_lang_id"])

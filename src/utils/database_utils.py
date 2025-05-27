@@ -4,6 +4,8 @@ import datetime
 import traceback
 import logging
 import base64
+import os
+import oracledb
 
 ORDS_SERVICE_ENDPOINT = "https://apex.oraclecorp.com/pls/apex/tieaicckk"
 SOURCE_LANGUAGES = "sourcelanguages"
@@ -13,6 +15,20 @@ ANALYSIS_DETAILS = "analysisdetails"
 DOCUMENTATION_DETAILS = "documentationdetails"
 CONVERSION_DETAILS = "conversiondetails"
 DOCUMENTATION_COMPONENTS = "documentationcomponents"
+
+
+# Oracle connection of ADW FINERGY AI
+def get_oracle_connection():
+    wallet_location = "Wallet_FINERGYAI"
+    connection = oracledb.connect(
+        user="FINERGY_AI",
+        password = os.environ.get("ORACLE_WALLET_PASSWORD"),
+        dsn="finergyai_high", 
+        config_dir=wallet_location,
+        wallet_location=wallet_location,
+        wallet_password=os.environ.get("ORACLE_WALLET_PASSWORD")
+    )
+    return connection
 
 
 def get_language_details(code_language_id):
@@ -154,6 +170,30 @@ def db_get_documentation_details(user_request_id):
     return None
 
 
+def db_get_documentation_for_embedding(user_request_id = None):
+    logging.warning(f"START: db_get_documentation_for_embedding.")
+    try:
+        if user_request_id is None:
+            query_param = '?q={"embedding_status":{"$null": null}}&limit=500'
+        else:
+            query_param = '?q={"embedding_status":{"$null": null},"user_request_id":{"$eq":'+str(user_request_id)+'}}&limit=500'
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_DETAILS}/{query_param}"
+        logging.warning(f"Calling API: {api_endpoint}")
+        response = requests.get(api_endpoint)
+        if response.status_code == 200:
+            data = response.json()            
+            return data["items"]
+        else:
+            response.raise_for_status()
+    except Exception as e:
+        logging.warning(f"Error in db_get_documentation_for_embedding: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning(f"END: db_get_documentation_for_embedding.")
+    return None
+
+
 def db_get_documentation_and_file_details(user_request_id):
     logging.warning(f"START: db_get_documentation_and_file_details.")
     code_documentation_details = []
@@ -217,10 +257,16 @@ def update_database(api_endpoint, df):
         Exception: If there is an error during the API call.
     """
     for index, row in df.iterrows():
-        row_dict = row.to_dict()
-        row_dict['updated_datetime'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')        
-        logging.warning(f"Row {index}: {row_dict}")
-        update_database_by_dict(api_endpoint, row_dict)
+        try:
+            row_dict = row.to_dict()
+            row_dict['updated_datetime'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')        
+            logging.warning(f"Row {index}: {row_dict}")
+            update_database_by_dict(api_endpoint, row_dict)
+        except Exception as e:
+            logging.warning(f"Exception updating row {index}: {str(e)}")
+            logging.warning(traceback.format_exc())
+            # Optionally continue to next row without raising
+            continue
 
 def update_user_request_status(user_request_id, action_status_dict):
     """
@@ -335,3 +381,85 @@ def decode_blob_to_string(blob_data):
         logging.warning(f"Error decoding BLOB data: {str(e)}")
         logging.warning(traceback.format_exc())
         raise
+
+def update_documentation_details_embedding_status(documentation_details_id, status="Y"):
+    """
+    Updates the embedding_status column for a documentation_details entry.
+
+    Args:
+        documentation_details_id (int): The ID of the documentation_details entry.
+        status (str): The status to set for embedding_status (default "Y").
+
+    Raises:
+        Exception: If there is an error during the update process.
+    """
+    logging.warning("START: update_documentation_details_embedding_status")
+    try:
+        api_endpoint = f"{ORDS_SERVICE_ENDPOINT}/{DOCUMENTATION_DETAILS}/{documentation_details_id}"
+        logging.warning(f"Calling API: {api_endpoint}")
+        response = requests.get(api_endpoint)
+        if response.status_code == 200:
+            response_dict = response.json()
+            response_dict["embedding_status"] = status
+            update_database_by_dict(api_endpoint, response_dict, "PUT")
+            logging.warning(f"Updated embedding_status for documentation_details_id={documentation_details_id} to {status}")
+        else:
+            response.raise_for_status()
+    except Exception as e:
+        logging.warning(f"Error in update_documentation_details_embedding_status: {str(e)}")
+        logging.warning(traceback.format_exc())
+        raise
+    finally:
+        logging.warning("END: update_documentation_details_embedding_status")
+
+
+def get_similarity_searched_documents(user_query_embedding, user_request_id):
+    """
+    Retrieves the top 10 most similar documents from CODE_DOCUMENTATION_EMBEDDING table
+    based on the VECTOR_DISTANCE between the stored documentation_embedding and the user_query_embedding,
+    filtered by user_request_id.
+
+    Args:
+        user_query_embedding (list or str): The embedding to compare against.
+        user_request_id (int): The user request ID to filter results.
+
+    Returns:
+        list: List of tuples (code_file_name, code_file_content, documentation_file_name, documentation_file_content).
+    """
+    logging.warning(f"START: get_similarity_searched_documents with user_request_id={user_request_id}, embedding={user_query_embedding}")
+    conn = None
+    cursor = None
+    try:
+        conn = get_oracle_connection()
+        cursor = conn.cursor()
+        embedding_str = str(user_query_embedding)
+        sql = f"""
+            SELECT CODE_FILE_NAME, CODE_FILE_CONTENT, DOCUMENTATION_FILE_NAME, DOCUMENTATION_FILE_CONTENT
+            FROM CODE_DOCUMENTATION_EMBEDDING
+            WHERE USER_REQUEST_ID = :user_request_id
+            ORDER BY VECTOR_DISTANCE(documentation_embedding, '{embedding_str}', EUCLIDEAN)
+            FETCH EXACT FIRST 10 ROWS ONLY
+        """
+        logging.warning(f"Executing SQL: {sql} with user_request_id={user_request_id}")
+        cursor.execute(sql, {"user_request_id": user_request_id})
+        results = []
+        for row in cursor:
+            results.append((row[0], str(row[1]), row[2], str(row[3])))
+        logging.warning(f"END: get_similarity_searched_documents, found {len(results)} results")
+        return results
+    except Exception as e:
+        logging.warning(f"Error in get_similarity_searched_documents: {str(e)}")
+        logging.warning(traceback.format_exc())
+        return []
+    finally:
+        # Always check if cursor/conn are open before closing
+        try:
+            if cursor is not None and not cursor.connection is None:
+                cursor.close()
+        except Exception as close_cursor_exc:
+            logging.warning(f"Exception closing cursor: {str(close_cursor_exc)}")
+        try:
+            if conn is not None and conn.is_healthy():
+                conn.close()
+        except Exception as close_conn_exc:
+            logging.warning(f"Exception closing connection: {str(close_conn_exc)}")

@@ -141,18 +141,17 @@ def get_brd_generation_prompt(documentation_content, additional_context):
 
 def get_user_query_prompt(documentation_content, additional_context, user_query):
     user_query_prompt = f"""
-    You are an expert business and technical analyst.
+    You are an expert business and technical analyst assistant.
     Below is a business functionality or technical documentation extracted from a software project. A user has a specific question about this documentation.
-    Do not generate anything outside of this documentation.
+    Do not respond anything outside of this documentation.
 
     ### Your Task:
-    - Analyze the documentation and provide a **detailed, accurate, and clear** answer to the user's question.
-    - Use business-friendly language where appropriate.
+    - Analyze the documentation and provide a detailed, accurate, and clear answer to the user's question.
     - If the answer involves multiple parts or components, use bullet points or subheadings for clarity.
     - If the answer is not directly found in the document, infer from related content and mention that the answer is inferred.
 
     ### Response Format: Markdown
-
+    
     ### User Question:
     {user_query}
 
@@ -160,15 +159,6 @@ def get_user_query_prompt(documentation_content, additional_context, user_query)
     {documentation_content}
 
     {"" if additional_context is None else {"Additional Context:" + additional_context}}
-
-    ### Output Format:
-
-    ### Below is the required Information as per given project code
-    [Direct, specific, well-structured response to the user's question.]
-
-    ### Related Information (if helpful)
-    - [Supporting module, feature, or interaction]
-    - [Reference to where in the document the info was found or inferred from]
     """
     return user_query_prompt
 

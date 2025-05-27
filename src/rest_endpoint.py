@@ -28,6 +28,7 @@ class UserRequest(BaseModel):
     user_request_id: int
     llm_model: str = "meta.llama3.3-70b"
     test_mode: bool = False
+    use_embedding: bool = True
     additional_context: str = None
     documentation_components: list = []
     user_query: str = None
@@ -149,10 +150,11 @@ async def handle_documentation_user_request_endpoint(user_request: UserRequest):
     additional_context = user_request.additional_context
     llm_model = user_request.llm_model
     user_query = user_request.user_query
+    use_embedding = user_request.use_embedding
 
     logging.warning(f"START: handle_documentation_user_request_endpoint with user_request_id={user_request_id}")
     try:
-        user_query_response = code_conversion_utils.handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query)
+        user_query_response = code_conversion_utils.handle_documentation_user_request(llm_model, user_request_id, additional_context, user_query, use_embedding)
         response = {
             "user_request_id": user_request_id,
             "success": True,
