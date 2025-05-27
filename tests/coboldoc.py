@@ -25,7 +25,7 @@ conversion_id = 1742586056
 react_project_zip_file = f"{conversion_folder}/target_react_structure/react_project.zip"
 FILE_EXCLUSIONS = ["png","jpg","jpeg","txt","md","json","xml","csv","zip","gz","tar","pdf","doc","docx","xls","xlsx","ppt","pptx","pyc","exe","dll","so","lib",
                    "obj","bin","jar","war","ear","class","vbproj","csproj","vcxproj","vcproj","filters","user","data","vspscc","sln","suo","webinfo","xsd","xslt"]
-COBOL_JS_FILE_INCLUSIONS = ["cbl"]
+COBOL_JS_FILE_INCLUSIONS = ["cbl","jcl"]
 ROUTER_FILE_FIND_STRING = "$urlRouterProvider"
 
 
@@ -167,7 +167,7 @@ def save_to_vector_db_fs(texts, filename, override_task, file_check_status):
     if override_task and file_check_status:
         if file_check_status:
             delete_existing_docs_fs(filename_check=filename)
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100, separators=["\n","\r\n"])
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=100, separators=["\n","\r\n"])
     texts = text_splitter.create_documents([texts], metadatas=[{"filename":filename}])
     
     try:
@@ -248,27 +248,79 @@ def get_prompt_template(question, context):
 def get_document_prompt_template(question, context):
     
     prompt_template = f"""
-    You are an expert programmer of Cobol and an expert software documentation generator. In user_input, I would be providing you the Buiness Use Case and given the following list of files, code and documentation to extract key information in context.
-Understand the context of use case and generate detailed level Business requirement documents for the provided use case.
-Consider the use case as the summary and generate all the possible information using the code to include all the validations, operation and flows.
+    You are an expert programmer of COBOL and an expert software documentation generator. In user_input, I would be providing you the Business Use Case and given the following list of files, code, and documentation to extract key information in context.
+    Understand the context of the use case and generate detailed-level Business Requirement Documents (BRD) for the provided use case.
+    Consider the use case as the summary and generate all the possible information using the code to include all the validations, operations, and flows.
 
 **Formatting Requirements**:  
 - Only provide documentation based on the given COBOL code and project file structure.  
 - The file-level documentation should be in Markdown format for easy readability.  
-- Do not generate unnecessary commentary in your answer.
-- if you can't find the answer in the provided Text just say 'I don't know'. 
-    """
-    prompt_template = f"""{prompt_template}
-    Code, file and documentation:{context}
-    Buiness Use Case:{question}
+- Do not generate unnecessary commentary in your answer.  
+- If you can't find the answer in the provided Text, just say 'I don't know'.  
+- The documentation should include:
+  1. **Process Flow**: A brief summary of the purpose and functionality based on the documentation.
+  2. **Detailed Business Requirements**: Start with prerequisites (if any), followed by structured requirements in a numbered format (e.g., 1.1, 1.2, etc.) with proper sections, bullet points, and headings to ensure clarity.
+  3. **Changes**: Include multiple changes as needed to define the requirement. Each change should have:
+     - **Change# X**: A high-level description of the change.
+     - **Details**: A breakdown of the change, including:
+       - **Purpose**: Why the change is needed.
+       - **Impact**: What areas of the system are affected.
+       - **Steps**: Specific steps or logic implemented in the code to achieve the change.
+       - **Validations**: Any validations or conditions applied.
+       - **Dependencies**: Any dependencies or prerequisites for the change.
+       - **Examples**: Provide examples or scenarios where the change applies.
 
-    output_format: Markdown format
-    """
+**Example**:  
+User Input: "Direct Bill: A billing method in which a billing is mailed to the Payor."  
+Output:  
+1. **Process Flow**:  
+   - Direct Bill Generation involves generating billing notices for payors.  
+   - Notices include renewal, late payment offers, and conservation notices.  
+
+2. **Detailed Business Requirements**:  
+   - **Prerequisite**: Policies must be set to direct bill mode by a clerk or system.  
+   - **Change# 1: Billing Generation**  
+     - **Purpose**: Automate the generation of billing notices.  
+     - **Impact**: Affects nightly billing cycles and notice generation logic.  
+     - **Steps**:  
+       1. System initiates billing through nightly cycles.  
+       2. Criteria for billing include:  
+          - Policy status must allow billing.  
+          - Payments must be up-to-date.  
+     - **Validations**:  
+       - Ensure policy status is active.  
+       - Suppress billing for policies with outstanding issues.  
+     - **Dependencies**:  
+       - Requires integration with the policy management system.  
+     - **Examples**:  
+       - Single bills are generated 15 days prior to the due date.  
+       - Combined bills are generated on the 13th of the month.  
+
+   - **Change# 2: Late Payment Notices**  
+     - **Purpose**: Notify payors of overdue payments.  
+     - **Impact**: Affects notice templates and timing logic.  
+     - **Steps**:  
+       1. Generate late payment notices 35 days after the due date.  
+       2. Include details of overdue amounts and payment options.  
+     - **Validations**:  
+       - Ensure notices are not sent for policies in grace periods.  
+     - **Dependencies**:  
+       - Requires accurate tracking of payment dates.  
+     - **Examples**:  
+       - Notices are sent for policies overdue by more than 30 days.  
+
+This is just an example format. Your output should follow this structure but be specific to the provided use case.
+
+Code, file, and documentation: {context}  
+Business Use Case: {question}  
+
+Output Format: Markdown
+"""
     return prompt_template
 
 # print(os.name)
 DATA_DIR = "C:\\Development\\work\\repo\\document_based_chat\\vector_database\\deepeshT"
-num_results = 5
+num_results = 10
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def is_file_processed(filename):
@@ -325,28 +377,29 @@ source_folder = extract_zip_file(source_zip_file, 1)
 #get all the cbl files in a list from source folder
 project_files = get_files_from_directory(source_folder, exclude_files=FILE_EXCLUSIONS, include_files=COBOL_JS_FILE_INCLUSIONS, include_empty_folders=True)
 #get first file from the list which has extension cbl
-project_files = [file for file in project_files if file.endswith(".cbl")]
+project_files = [file for file in project_files if file.endswith(".jcl") or file.endswith(".cbl")]
 embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-large-en-v1.5", encode_kwargs = {"normalize_embeddings": True})
 #Uncomment the below for loop to generate documentation for all the files in the project_files list
-###for file_name in project_files:
-    ###print(file_name)
+#comment the below for loop to generate documentation for all the files in the project_files list   
+for file_name in project_files:
+    print(file_name)
     #get the file name from the path
-    ###file_nameExt = file_name.split("/")[-1]
+    file_nameExt = file_name.split("/")[-1]
     #read content of the file
-    ###file_content = read_file(file_name)
+    file_content = read_file(file_name)
     #print content of the file
     ###print(file_content)
-    ###document_generation_prompt = get_document_generation_prompt("COBOL",file_name,file_content,"Documentation will be used to generate Application worflow via RAG in future")
-    ###response = generate_oci_gen_ai_response("meta.llama3.1-70b", [{"role":"user", "content": document_generation_prompt}])
+    document_generation_prompt = get_document_generation_prompt("COBOL",file_name,file_content,"Documentation will be used to generate Application worflow via RAG in future")
+    response = generate_oci_gen_ai_response("meta.llama3.1-70b", [{"role":"user", "content": document_generation_prompt}])
     ###print(f"response:{response}")
     #write the response in DATA_DIR to a markdown format file with 
     #contacatenate value from varirable file_name and .md in fucntion write_file(os.path.join(DATA_DIR, file_nameExt".md"), response)
-    ###write_file(os.path.join(DATA_DIR, file_nameExt+".md"), response)
+    write_file(os.path.join(DATA_DIR, file_nameExt+".md"), response)
     #break the loop after first iteration
     #update the vector store with the file name and response    
-    ###update_vector_store(file_name, response)
+    update_vector_store(file_name, response)
     #break the loop after first iteration
-    ###update_vector_store(file_name, response)
+    ##update_vector_store(file_name, response)
 ###file_name = project_files[2]
 ###print(file_name)
 #get the file name from the path
